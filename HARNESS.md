@@ -47,14 +47,14 @@
 ## 현재 작업 인수인계
 
 - 상태: 완료
-- 마지막 담당: Codex
+- 마지막 담당: Claude Code
 - 기준 브랜치: `main`
-- 마지막 완료 작업: 공개용 저장소와 Vercel 프로젝트 분리, 공용 하네스 및 작업 원칙 추가
+- 마지막 완료 작업: 공개용 Vercel `YOUTUBE_API_KEY` 설정 후 추천 영상 동작 확인
 - 공개 URL: `https://mnm-public.vercel.app`
 - 보호 대상: 원본 `Jtclee85/mnm`, 원본 Vercel 프로젝트 `mnm`
-- 알려진 설정: 공개용 `OPENAI_API_KEY`는 Vercel Production에 저장됨. `YOUTUBE_API_KEY`는 아직 공개용 프로젝트에 설정하지 않음.
-- 검증 상태: 공개용 복제 시 스모크 테스트 13개와 프로덕션 빌드 통과. 이번 문서 변경은 링크·Git 상태·비밀값 검사를 확인한다.
-- 미완료: 별도 YouTube API 키 발급 및 공개용 Vercel의 `YOUTUBE_API_KEY` 설정, 재배포 후 추천 영상 확인
-- 다음 에이전트 시작점: 사용자가 별도 YouTube API 키를 준비했는지 확인하고, 키를 채팅에 노출하지 않은 채 `mnm-public`에만 설정한다.
+- 알려진 설정: 공개용 `OPENAI_API_KEY`와 `YOUTUBE_API_KEY`가 Vercel에 저장됨. `YOUTUBE_API_KEY`는 사용자가 원본 심사본과 **같은 키**를 복사해 넣었으므로 YouTube API 일일 할당량을 원본과 공유한다. 공개용 사용량이 늘면 원본 추천 영상이 `quotaLimited`로 비게 될 수 있다.
+- 검증 상태: 2026-09-29 공개 URL HTTP 200, `/api/recommended-videos?topic=독도` 응답 `source: live`, `quotaLimited: false`, 승인 채널(동북아역사재단) 영상 3개 반환 확인. 코드 변경 없음.
+- 미완료: 없음. 선택 사항으로 할당량 분리가 필요해지면 별도 Google Cloud 프로젝트의 새 키로 `mnm-public`의 `YOUTUBE_API_KEY`만 교체한다.
+- 다음 에이전트 시작점: 사용자 요청을 확인한다. 추천 영상이 비면 먼저 API 응답의 `quotaLimited`/`error` 필드로 원본과의 할당량 공유 문제인지 확인한다.
 
 작업을 마칠 때 위 항목을 덮어써서 최신 상태만 유지한다. 과거 이력이 필요하면 Git 로그를 사용한다.
