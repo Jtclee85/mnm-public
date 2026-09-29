@@ -13,13 +13,17 @@ const MAX_CONVERSATION_CHARS = 2500;
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
-// 키 누락·키 오류·사용량 초과는 화면이 키 설정 안내나 사용량 안내를 띄울 수 있도록
+// 키·학급 코드 문제와 사용량 초과는 화면이 학급 코드 안내나 사용량 안내를 띄울 수 있도록
 // HTTP 상태와 code를 함께 돌려준다. 그 밖의 판정 실패는 기존처럼 200 + relevant:false다.
 const PASS_THROUGH_ERROR_CODES = new Set([
   AI_ERROR_CODES.MISSING_KEY,
   AI_ERROR_CODES.INVALID_KEY,
   AI_ERROR_CODES.QUOTA_EXCEEDED,
   AI_ERROR_CODES.RATE_LIMITED,
+  AI_ERROR_CODES.CLASS_CODE_REQUIRED,
+  AI_ERROR_CODES.CLASS_CODE_INVALID,
+  AI_ERROR_CODES.CLASS_UNAVAILABLE,
+  AI_ERROR_CODES.TOO_MANY_ATTEMPTS,
 ]);
 
 const RELEVANCE_SCHEMA = {
@@ -70,7 +74,7 @@ export default async function handler(req) {
   const provider = getAiProvider();
   let apiKey = '';
   try {
-    apiKey = resolveApiKey(req, provider);
+    apiKey = await resolveApiKey(req, provider);
   } catch (error) {
     const aiError = toAiError(error);
     return relevanceResponse({ relevant: false, reason: aiError.code, redirect: '', ...aiErrorBody(aiError) }, aiError.status);

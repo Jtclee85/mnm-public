@@ -15,17 +15,17 @@ import ResearchCompass from '../components/ResearchCompass';
 import ResearchTutorialQuest, { TUTORIAL_QUESTS } from '../components/ResearchTutorialQuest';
 import AppUsageTutorial, { APP_TUTORIAL_SCENES } from '../components/AppUsageTutorial';
 import SubmissionStartScreen from '../components/SubmissionStartScreen';
-import AiKeySettingsDialog from '../components/AiKeySettingsDialog';
+import ClassCodeDialog from '../components/ClassCodeDialog';
 
 import { createSystemMessage, createChatSystemMessage, createEvaluationSystemMessage } from '../lib/systemPrompt';
 import { parseSectionedResponse, parseQuizBlock, extractTagBlock, copyText, DEFAULT_STUDENT_LEVEL } from '../lib/parseResponse';
 import { useStudentNotes } from '../lib/useStudentNotes';
 import { useSessionSave } from '../lib/useSessionSave';
-import { useAiKey, maskAiKey } from '../lib/useAiKey';
+import { useClassSession } from '../lib/useClassSession';
 import {
   AI_ERROR_CODES,
-  AI_KEY_ERROR_CODES,
-  REQUIRES_USER_AI_KEY,
+  CLASS_CODE_ERROR_CODES,
+  REQUIRES_CLASS_CODE,
   isClassifiedAiError,
 } from '../lib/aiProviderConfig';
 import { beginAiRequest, fingerprintAiRequest } from '../lib/aiRequestGuard';
@@ -178,14 +178,14 @@ export default function Home({
   // 실패 원인 code — 키 문제면 에러 박스에 'API 키 설정 열기' 버튼을 함께 보여준다.
   const [analysisErrorCode, setAnalysisErrorCode] = useState('');
 
-  // 공개용 Gemini 모드: 사용자가 자기 기기에 저장한 키로 AI를 호출한다.
-  // 오프라인 시연은 API를 전혀 부르지 않으므로 키를 요구하지 않는다.
-  const aiKey = useAiKey();
-  const aiKeyRequired = REQUIRES_USER_AI_KEY && !demoMode;
-  const [aiKeyDialogOpen, setAiKeyDialogOpen] = useState(false);
-  const [aiKeyDialogNotice, setAiKeyDialogNotice] = useState('');
-  // '나중에 설정'을 누르면 이번 방문에서는 자동으로 다시 열지 않는다(다음 방문에는 다시 안내).
-  const [aiKeyPromptDismissed, setAiKeyPromptDismissed] = useState(false);
+  // 공개용 Gemini 모드: 교사가 만든 학급 코드로 AI를 호출한다. 학생 브라우저에는 교사 키가 없다.
+  // 오프라인 시연은 API를 전혀 부르지 않으므로 학급 코드를 요구하지 않는다.
+  const classSession = useClassSession();
+  const classRequired = REQUIRES_CLASS_CODE && !demoMode;
+  const [classDialogOpen, setClassDialogOpen] = useState(false);
+  const [classDialogNotice, setClassDialogNotice] = useState('');
+  // '나중에 입력'을 누르면 이번 방문에서는 자동으로 다시 열지 않는다(다음 방문에는 다시 안내).
+  const [classPromptDismissed, setClassPromptDismissed] = useState(false);
 
   // 긴 자료 안내 — 자료를 차단하는 대신 핵심 중심으로 잘라 분석한다는 알림
   const [analysisNotice, setAnalysisNotice] = useState('');
@@ -334,39 +334,39 @@ export default function Home({
 
   const isBusy = loadingMode !== null || isAnalyzing;
 
-  // ── Gemini API 키 안내 ──
+  // ── 학급 코드 안내 ──
   // 사용법(완료·나중에 보기·다시 보지 않기 어느 쪽이든)과 자료조사 안내, 심사 시작화면이
-  // 모두 닫힌 뒤 키가 없으면 키 설정 창을 연다. 재방문 때 키가 저장돼 있으면 열지 않는다.
-  // '다시 보지 않기'(사용법 기록)와 키 저장 여부는 서로 다른 저장소 값으로 따로 관리한다.
+  // 모두 닫힌 뒤 학급에 들어와 있지 않으면 학급 코드 창을 연다. 같은 날 이미 들어왔으면 열지 않는다.
+  // '다시 보지 않기'(사용법 기록)와 학급 참여 여부는 서로 다른 저장소 값으로 따로 관리한다.
   useEffect(() => {
-    if (!aiKeyRequired || !aiKey.loaded || aiKey.hasKey || aiKeyPromptDismissed) return;
-    if (appTutorialOpen || tutorialOpen || submissionStartOpen || aiKeyDialogOpen) return;
-    setAiKeyDialogNotice('');
-    setAiKeyDialogOpen(true);
-  }, [aiKeyRequired, aiKey.loaded, aiKey.hasKey, aiKeyPromptDismissed, appTutorialOpen, tutorialOpen, submissionStartOpen, aiKeyDialogOpen]);
+    if (!classRequired || !classSession.loaded || classSession.hasClass || classPromptDismissed) return;
+    if (appTutorialOpen || tutorialOpen || submissionStartOpen || classDialogOpen) return;
+    setClassDialogNotice('');
+    setClassDialogOpen(true);
+  }, [classRequired, classSession.loaded, classSession.hasClass, classPromptDismissed, appTutorialOpen, tutorialOpen, submissionStartOpen, classDialogOpen]);
 
-  const openAiKeyDialog = (notice = '') => {
-    setAiKeyDialogNotice(notice);
-    setAiKeyDialogOpen(true);
+  const openClassDialog = (notice = '') => {
+    setClassDialogNotice(notice);
+    setClassDialogOpen(true);
   };
 
-  const closeAiKeyDialog = () => {
-    setAiKeyDialogOpen(false);
-    setAiKeyDialogNotice('');
-    setAiKeyPromptDismissed(true);
+  const closeClassDialog = () => {
+    setClassDialogOpen(false);
+    setClassDialogNotice('');
+    setClassPromptDismissed(true);
   };
 
-  // AI를 부르기 전 확인 — 키가 없으면 요청을 보내지 않고 키 설정 창으로 안내한다.
+  // AI를 부르기 전 확인 — 학급에 들어와 있지 않으면 요청을 보내지 않고 학급 코드 창으로 안내한다.
   // 입력한 조사 주제·자료·채팅 입력은 그대로 둔다.
-  const ensureAiKey = () => {
-    if (!aiKeyRequired || aiKey.hasKey) return true;
-    openAiKeyDialog(t.aiKey.requiredNotice);
+  const ensureClassAccess = () => {
+    if (!classRequired || classSession.hasClass) return true;
+    openClassDialog(t.classAccess.requiredNotice);
     return false;
   };
 
   // 서버 오류 code를 현재 언어의 안내문으로 바꾼다. code가 없으면 서버 문구를 그대로 쓴다.
   const aiErrorMessage = (code, fallback) =>
-    (code && t.aiKey.errors[code]) || fallback || t.processFailed;
+    (code && t.classAccess.errors[code]) || fallback || t.processFailed;
 
   // ── 반응형 ──
   useEffect(() => {
@@ -506,7 +506,7 @@ export default function Home({
     try {
       res = await fetch('/api/chat-once', {
         method: 'POST',
-        headers: aiKey.buildAiHeaders({ 'Content-Type': 'application/json' }),
+        headers: classSession.buildClassHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ messages: messageHistory })
       });
     } catch {
@@ -538,15 +538,15 @@ export default function Home({
       return;
     }
 
-    if (!ensureAiKey()) {
-      onError?.(t.aiKey.errors[AI_ERROR_CODES.MISSING_KEY], AI_ERROR_CODES.MISSING_KEY);
+    if (!ensureClassAccess()) {
+      onError?.(t.classAccess.errors[AI_ERROR_CODES.CLASS_CODE_REQUIRED], AI_ERROR_CODES.CLASS_CODE_REQUIRED);
       return;
     }
 
     // 같은 요청이 진행 중이거나 방금 성공했다면 보내지 않는다(버튼 연타·중복 이벤트 방지).
     const release = beginAiRequest(fingerprintAiRequest(messageHistory), { allowRepeat });
     if (!release) {
-      onError?.(t.aiKey.errors[AI_ERROR_CODES.DUPLICATE_REQUEST], AI_ERROR_CODES.DUPLICATE_REQUEST);
+      onError?.(t.classAccess.errors[AI_ERROR_CODES.DUPLICATE_REQUEST], AI_ERROR_CODES.DUPLICATE_REQUEST);
       return;
     }
 
@@ -556,7 +556,7 @@ export default function Home({
     };
     const fail = (message, code = '') => {
       release({ succeeded: false });
-      if (AI_KEY_ERROR_CODES.has(code)) openAiKeyDialog(message);
+      if (CLASS_CODE_ERROR_CODES.has(code)) openClassDialog(message);
       onError?.(message, code);
     };
 
@@ -596,7 +596,7 @@ export default function Home({
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: aiKey.buildAiHeaders({ 'Content-Type': 'application/json' }),
+        headers: classSession.buildClassHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ messages: messageHistory })
       });
 
@@ -801,8 +801,8 @@ export default function Home({
 
     setUsingAppTutorialPreset(false);
 
-    // 키가 없으면 분석을 시작하지 않고 키 설정 창을 연다. 입력한 주제와 자료는 그대로 남는다.
-    if (!ensureAiKey()) return;
+    // 학급에 들어와 있지 않으면 분석을 시작하지 않고 학급 코드 창을 연다. 입력한 주제와 자료는 그대로 남는다.
+    if (!ensureClassAccess()) return;
 
     if (demoMode) {
       // 실제 온라인 분석과 동일한 흐름으로 로딩 화면을 먼저 보여준다.
@@ -883,7 +883,7 @@ export default function Home({
       return;
     }
     if (!hasModeResult(mode) && loadingMode === null && !isAnalyzing) {
-      if (!ensureAiKey()) return;
+      if (!ensureClassAccess()) return;
       await analyzeForMode(mode);
     }
   };
@@ -1009,7 +1009,7 @@ export default function Home({
       return;
     }
 
-    if (isBusy || !ensureAiKey()) return;
+    if (isBusy || !ensureClassAccess()) return;
 
     setIsAnalyzing(true);
     setLoadingTool(toolKey ?? null);
@@ -1049,7 +1049,7 @@ export default function Home({
       setToolResults(prev => ({ ...prev, evaluation: DEMO_CHAT_NOTICE }));
       return;
     }
-    if (isBusy || !ensureAiKey()) return;
+    if (isBusy || !ensureClassAccess()) return;
     setIsAnalyzing(true);
     setLoadingTool('evaluation');
 
@@ -1089,7 +1089,7 @@ export default function Home({
     try {
       const res = await fetch('/api/relevance', {
         method: 'POST',
-        headers: aiKey.buildAiHeaders({ 'Content-Type': 'application/json' }),
+        headers: classSession.buildClassHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           topic,
           sourceText: buildSourceTextForAnalysis(sourceText).slice(0, 6000),
@@ -1100,10 +1100,10 @@ export default function Home({
       });
 
       const data = await res.json().catch(() => ({}));
-      // 키·사용량 문제는 '주제와 관련 없는 질문'이 아니므로 그 원인을 그대로 안내한다.
+      // 학급 코드·키·사용량 문제는 '주제와 관련 없는 질문'이 아니므로 그 원인을 그대로 안내한다.
       if (!res.ok && data.code) {
         const message = aiErrorMessage(data.code, data.error);
-        if (AI_KEY_ERROR_CODES.has(data.code)) openAiKeyDialog(message);
+        if (CLASS_CODE_ERROR_CODES.has(data.code)) openClassDialog(message);
         return { relevant: false, redirect: message };
       }
       return {
@@ -1124,8 +1124,8 @@ export default function Home({
     const userText = (customPrompt ?? chatInput).trim();
     // 답변을 기다리는 중에는 새 질문을 보내지 않는다(Enter 연타로 같은 요청이 두 번 나가는 것 방지).
     if (!userText || isBusy || isChatLoading) return;
-    // 키가 없으면 질문을 보내지 않고 입력한 질문도 그대로 둔 채 키 설정 창을 연다.
-    if (!demoMode && !ensureAiKey()) return;
+    // 학급에 들어와 있지 않으면 질문을 보내지 않고 입력한 질문도 그대로 둔 채 학급 코드 창을 연다.
+    if (!demoMode && !ensureClassAccess()) return;
 
     const userMessage          = { role: 'user',      content: userText };
     const assistantPlaceholder = { role: 'assistant', content: '' };
@@ -1345,14 +1345,14 @@ export default function Home({
       >
         {activeTutorialText.reopen}
       </button>
-      {aiKeyRequired && (
+      {classRequired && (
         <button
           type="button"
-          data-testid="open-ai-key-settings-button"
+          data-testid="open-class-code-button"
           style={styles.tutorialHelpBtn}
-          onClick={() => openAiKeyDialog()}
+          onClick={() => openClassDialog()}
         >
-          {t.aiKey.openSettings}
+          {t.classAccess.openSettings}
         </button>
       )}
       <button style={styles.goHomeBtn} onClick={handleGoHome}>
@@ -1449,9 +1449,9 @@ export default function Home({
                       onExtracted={handleSignTextExtracted}
                       t={t}
                       demoMode={demoMode}
-                      buildAiHeaders={aiKey.buildAiHeaders}
-                      ensureAiKey={ensureAiKey}
-                      onAiKeyError={openAiKeyDialog}
+                      buildAiHeaders={classSession.buildClassHeaders}
+                      ensureAiAccess={ensureClassAccess}
+                      onAiAccessError={openClassDialog}
                     />
                   </div>
                   <textarea
@@ -1468,15 +1468,15 @@ export default function Home({
                 {analysisError && (
                   <div role="alert" data-testid="analysis-error" style={styles.analysisErrorBox}>
                     ⚠️ {analysisError}
-                    {aiKeyRequired && AI_KEY_ERROR_CODES.has(analysisErrorCode) && (
+                    {classRequired && CLASS_CODE_ERROR_CODES.has(analysisErrorCode) && (
                       <div>
                         <button
                           type="button"
-                          data-testid="analysis-error-open-key-settings"
+                          data-testid="analysis-error-open-class-code"
                           style={styles.analysisErrorKeyBtn}
-                          onClick={() => openAiKeyDialog()}
+                          onClick={() => openClassDialog()}
                         >
-                          {t.aiKey.openFromError}
+                          {t.classAccess.openFromError}
                         </button>
                       </div>
                     )}
@@ -1730,25 +1730,27 @@ export default function Home({
           showDontShowAgain={!demoMode}
         />
 
-        {/* Gemini API 키 설정 — 사용법을 마친 뒤, 키 없이 AI 기능을 눌렀을 때, 머리글 버튼으로 연다 */}
-        {aiKeyRequired && (
-          <AiKeySettingsDialog
-            isOpen={aiKeyDialogOpen}
-            text={t.aiKey}
-            savedKeyMask={maskAiKey(aiKey.apiKey)}
-            savedRemember={aiKey.remember}
-            requiredNotice={aiKeyDialogNotice}
+        {/* 학급 코드 입력 — 사용법을 마친 뒤, 학급 없이 AI 기능을 눌렀을 때, 머리글 버튼으로 연다 */}
+        {classRequired && (
+          <ClassCodeDialog
+            isOpen={classDialogOpen}
+            text={t.classAccess}
+            session={classSession.session}
+            requiredNotice={classDialogNotice}
             isMobile={isMobile}
-            onSave={(key, options) => {
-              aiKey.saveKey(key, options);
-              setAiKeyDialogNotice('');
-              if (AI_KEY_ERROR_CODES.has(analysisErrorCode)) {
-                setAnalysisError('');
-                setAnalysisErrorCode('');
+            onJoin={async (code) => {
+              const result = await classSession.joinClass(code);
+              if (result.ok) {
+                setClassDialogNotice('');
+                if (CLASS_CODE_ERROR_CODES.has(analysisErrorCode)) {
+                  setAnalysisError('');
+                  setAnalysisErrorCode('');
+                }
               }
+              return result;
             }}
-            onDelete={aiKey.clearKey}
-            onClose={closeAiKeyDialog}
+            onLeave={classSession.leaveClass}
+            onClose={closeClassDialog}
           />
         )}
 

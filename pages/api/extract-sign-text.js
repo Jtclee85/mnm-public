@@ -27,6 +27,10 @@ const PASS_THROUGH_ERROR_CODES = new Set([
   AI_ERROR_CODES.INVALID_KEY,
   AI_ERROR_CODES.QUOTA_EXCEEDED,
   AI_ERROR_CODES.RATE_LIMITED,
+  AI_ERROR_CODES.CLASS_CODE_REQUIRED,
+  AI_ERROR_CODES.CLASS_CODE_INVALID,
+  AI_ERROR_CODES.CLASS_UNAVAILABLE,
+  AI_ERROR_CODES.TOO_MANY_ATTEMPTS,
   AI_ERROR_CODES.SAFETY_BLOCKED,
   AI_ERROR_CODES.UNAVAILABLE,
   AI_ERROR_CODES.NETWORK,
@@ -74,7 +78,7 @@ export default async function handler(req) {
   // 이미지(개인정보 포함 가능성이 있는 원본 데이터)와 키는 어떤 경우에도 로그에 남기지 않는다.
   try {
     const provider = getAiProvider();
-    const apiKey = resolveApiKey(req, provider);
+    const apiKey = await resolveApiKey(req, provider);
     const parsed = await provider.analyzeImage({
       apiKey,
       image,

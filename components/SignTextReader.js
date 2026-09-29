@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { compressImageFile, validateImageFile } from '../lib/imageCompress';
 import { getUiText } from '../lib/i18n';
-import { AI_KEY_ERROR_CODES } from '../lib/aiProviderConfig';
+import { CLASS_CODE_ERROR_CODES } from '../lib/aiProviderConfig';
 
 const VALIDATION_ERROR_KEY = {
   NO_FILE: 'signReaderNoFile',
@@ -12,16 +12,16 @@ const VALIDATION_ERROR_KEY = {
 const DEMO_OCR_NOTICE =
   '오프라인 시연에서는 이미지 인식 기능이 작동하지 않습니다. 온라인 프로그램에서 안내판 사진을 올리면 원본자료를 추출할 수 있습니다.';
 
-// buildAiHeaders·ensureAiKey·onAiKeyError는 공개용 Gemini 모드의 사용자 키 처리용이다.
-// 넘기지 않으면(OpenAI 모드 등) 기존처럼 키 없이 요청한다.
+// buildAiHeaders·ensureAiAccess·onAiAccessError는 공개용 Gemini 모드의 학급 코드 처리용이다.
+// 넘기지 않으면(OpenAI 모드 등) 기존처럼 학급 코드 없이 요청한다.
 export default function SignTextReader({
   isMobile,
   onExtracted,
   t = getUiText('ko'),
   demoMode = false,
   buildAiHeaders = (headers) => headers,
-  ensureAiKey = () => true,
-  onAiKeyError,
+  ensureAiAccess = () => true,
+  onAiAccessError,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState(null);
@@ -111,10 +111,10 @@ export default function SignTextReader({
       return;
     }
 
-    // 키가 없으면 사진을 보내지 않는다. 고른 사진은 그대로 두고 키 설정 창을 연다.
-    if (!ensureAiKey()) {
+    // 학급에 들어와 있지 않으면 사진을 보내지 않는다. 고른 사진은 그대로 두고 학급 코드 창을 연다.
+    if (!ensureAiAccess()) {
       setStatus('error');
-      setErrorMessage(t.aiKey?.requiredNotice || t.signReaderFailure);
+      setErrorMessage(t.classAccess?.requiredNotice || t.signReaderFailure);
       return;
     }
 
@@ -132,8 +132,8 @@ export default function SignTextReader({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.text) {
-        const message = (data.code && t.aiKey?.errors?.[data.code]) || data.error || t.signReaderFailure;
-        if (AI_KEY_ERROR_CODES.has(data.code)) onAiKeyError?.(message);
+        const message = (data.code && t.classAccess?.errors?.[data.code]) || data.error || t.signReaderFailure;
+        if (CLASS_CODE_ERROR_CODES.has(data.code)) onAiAccessError?.(message);
         setStatus('error');
         setErrorMessage(message);
         setWarnings(Array.isArray(data.warnings) ? data.warnings : []);

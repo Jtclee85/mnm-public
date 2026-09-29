@@ -21,7 +21,7 @@ export default async function handler(req) {
     assertValidChatMessages(messages);
 
     const provider = getAiProvider();
-    const apiKey = resolveApiKey(req, provider);
+    const apiKey = await resolveApiKey(req, provider);
     const content = await provider.generateOnce({ messages, apiKey });
 
     return new Response(JSON.stringify({ content }), {

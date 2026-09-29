@@ -1,7 +1,14 @@
 const { test, expect } = require('@playwright/test');
 
-// Gemini 서버 계층 단위 검증. 전역 fetch를 가짜로 바꿔 실제 Gemini API를 절대 호출하지 않는다.
-// 테스트용 키는 형식만 맞춘 가짜 값이다.
+// Gemini 서버 계층·학급 코드 단위 검증. 전역 fetch를 가로채 실제 Gemini API와 Upstash를
+// 절대 호출하지 않는다. Upstash 주소로 가는 요청은 테스트 전용 메모리 저장소가 처리한다.
+// 테스트용 키·비밀값은 형식만 맞춘 가짜 값이다.
+
+const UPSTASH_TEST_URL = 'https://upstash.unit.test';
+process.env.UPSTASH_REDIS_REST_URL = UPSTASH_TEST_URL;
+process.env.UPSTASH_REDIS_REST_TOKEN = 'unit-upstash-token';
+process.env.CLASS_KEY_SECRET = 'unit-only-class-secret-not-for-production-0000';
+delete process.env.CLASS_FAILURE_LIMIT;
 
 const {
   GEMINI_MODEL,
@@ -15,20 +22,34 @@ const {
 const { toGeminiContents, toGeminiSchema, GEMINI_OUTPUT_FORMAT_GUARD } = require('../lib/server/ai/messages');
 const { aiErrorBody, logAiError, AiError } = require('../lib/server/ai/errors');
 const { GEMINI_SAFETY_SETTINGS } = require('../lib/server/ai/safety');
-const { AI_KEY_HEADER } = require('../lib/aiProviderConfig');
+const { AI_KEY_HEADER, CLASS_CODE_HEADER, CLASS_MANAGE_HEADER } = require('../lib/aiProviderConfig');
 const { beginAiRequest, fingerprintAiRequest, resetAiRequestGuard } = require('../lib/aiRequestGuard');
 const { parseSectionedResponse } = require('../lib/parseResponse');
+const {
+  createClass,
+  resolveClassApiKey,
+  normalizeClassCode,
+  nextKstMidnight,
+  DEFAULT_CLASS_FAILURE_LIMIT,
+} = require('../lib/server/class/classes');
+const { createMockUpstashStore } = require('./support/mockUpstashStore');
 const chatHandler = require('../pages/api/chat').default;
 const chatOnceHandler = require('../pages/api/chat-once').default;
 const relevanceHandler = require('../pages/api/relevance').default;
 const signTextHandler = require('../pages/api/extract-sign-text').default;
 const verifyKeyHandler = require('../pages/api/verify-ai-key').default;
+const classCreateHandler = require('../pages/api/class/create').default;
+const classJoinHandler = require('../pages/api/class/join').default;
+const classUpdateHandler = require('../pages/api/class/update').default;
+const classDeleteHandler = require('../pages/api/class/delete').default;
 
 const FAKE_KEY = 'unit-fake-gemini-key-not-real-1234';
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 const realFetch = global.fetch;
+const upstash = createMockUpstashStore();
 let calls = [];
+let geminiHandler = () => { throw new Error('예상하지 못한 Gemini 호출'); };
 
 function jsonReply(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -45,21 +66,33 @@ function sseReply(events) {
 
 // 가짜 Gemini 서버 — 요청을 기록하고 handler가 정한 응답을 돌려준다.
 function mockGemini(handler) {
+  geminiHandler = handler;
+}
+
+function installFetch() {
   global.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.startsWith(UPSTASH_TEST_URL)) {
+      const result = upstash.handle(target.slice(UPSTASH_TEST_URL.length), JSON.parse(init.body));
+      return jsonReply(result.body, result.status);
+    }
     const call = {
-      url: String(url),
+      url: target,
       method: init.method || 'GET',
       headers: init.headers || {},
       body: init.body ? JSON.parse(init.body) : null,
     };
     calls.push(call);
-    return handler(call);
+    return geminiHandler(call);
   };
 }
 
-function appRequest(path, body, { key = FAKE_KEY, method = 'POST' } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (key !== null) headers[AI_KEY_HEADER] = key;
+// 학생 요청: 학급 코드 헤더(encodeURIComponent)를 싣는다. 교사 요청: teacherKey·manageToken 헤더.
+function appRequest(path, body, { classCode = null, teacherKey = null, manageToken = null, ip = '10.0.0.1', method = 'POST' } = {}) {
+  const headers = { 'Content-Type': 'application/json', 'x-real-ip': ip };
+  if (classCode !== null) headers[CLASS_CODE_HEADER] = encodeURIComponent(classCode);
+  if (teacherKey !== null) headers[AI_KEY_HEADER] = teacherKey;
+  if (manageToken !== null) headers[CLASS_MANAGE_HEADER] = manageToken;
   return new Request(`http://localhost${path}`, {
     method,
     headers,
@@ -75,6 +108,9 @@ async function collect(iterator) {
 
 test.beforeEach(() => {
   calls = [];
+  upstash.clear();
+  geminiHandler = () => { throw new Error('예상하지 못한 Gemini 호출'); };
+  installFetch();
   resetAiRequestGuard();
 });
 
@@ -252,27 +288,39 @@ test.describe('Gemini 오류 분류', () => {
 
 test.describe('API 라우트 계약 (Gemini 모드)', () => {
   const messages = [{ role: 'system', content: 'S' }, { role: 'user', content: '고인돌이 뭐야?' }];
+  let classCode = '';
+  const student = (path, body, options = {}) => appRequest(path, body, { classCode, ...options });
+
+  test.beforeEach(async () => {
+    ({ code: classCode } = await createClass({ schoolName: '테스트초', apiKey: FAKE_KEY }));
+  });
 
   test('/api/chat: 기존 SSE 계약(data: JSON 문자열)을 유지한다', async () => {
     mockGemini(() => sseReply([textCandidate('<easy>첫 조각'), textCandidate(' 둘째 조각</easy>')]));
-    const res = await chatHandler(appRequest('/api/chat', { messages }));
+    const res = await chatHandler(student('/api/chat', { messages }));
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('text/event-stream');
     const body = await res.text();
     expect(body).toBe(`data: ${JSON.stringify('<easy>첫 조각')}\n\ndata: ${JSON.stringify(' 둘째 조각</easy>')}\n\n`);
+    // 학급 코드로 찾은 교사 키가 서버에서만 Gemini로 전달된다.
+    expect(calls[0].headers['x-goog-api-key']).toBe(FAKE_KEY);
   });
 
-  test('/api/chat: 키가 없으면 Gemini를 부르지 않고 401 missing_key를 돌려준다', async () => {
+  test('/api/chat: 학급 코드가 없거나 틀리면 Gemini를 부르지 않는다', async () => {
     mockGemini(() => jsonReply({}));
-    const res = await chatHandler(appRequest('/api/chat', { messages }, { key: null }));
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ code: 'missing_key' });
+    const missing = await chatHandler(student('/api/chat', { messages }, { classCode: null }));
+    expect(missing.status).toBe(401);
+    expect(await missing.json()).toMatchObject({ code: 'class_code_required' });
+
+    const wrong = await chatHandler(student('/api/chat', { messages }, { classCode: '테스트초-99999' }));
+    expect(wrong.status).toBe(401);
+    expect(await wrong.json()).toMatchObject({ code: 'class_code_invalid' });
     expect(calls).toHaveLength(0);
   });
 
   test('/api/chat: 하루 무료 할당량 초과는 SSE를 열기 전에 429 quota_exceeded로 알린다', async () => {
     mockGemini(() => jsonReply({ error: { status: 'RESOURCE_EXHAUSTED', message: `quota for ${FAKE_KEY}`, details: [{ violations: [{ quotaId: 'PerDay' }] }] } }, 429));
-    const res = await chatHandler(appRequest('/api/chat', { messages }));
+    const res = await chatHandler(student('/api/chat', { messages }));
     expect(res.status).toBe(429);
     const text = await res.text();
     expect(JSON.parse(text).code).toBe('quota_exceeded');
@@ -283,7 +331,7 @@ test.describe('API 라우트 계약 (Gemini 모드)', () => {
 
   test('/api/chat: 입력이 너무 길면 Gemini를 부르지 않는다', async () => {
     mockGemini(() => jsonReply({}));
-    const res = await chatHandler(appRequest('/api/chat', { messages: [{ role: 'user', content: 'x'.repeat(25001) }] }));
+    const res = await chatHandler(student('/api/chat', { messages: [{ role: 'user', content: 'x'.repeat(25001) }] }));
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'input_too_long' });
     expect(calls).toHaveLength(0);
@@ -291,7 +339,7 @@ test.describe('API 라우트 계약 (Gemini 모드)', () => {
 
   test('/api/chat-once: 기존 { content } 계약을 유지한다', async () => {
     mockGemini(() => jsonReply(textCandidate('비스트리밍 답변')));
-    const res = await chatOnceHandler(appRequest('/api/chat-once', { messages }));
+    const res = await chatOnceHandler(student('/api/chat-once', { messages }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ content: '비스트리밍 답변' });
     expect(calls[0].url).toContain(':generateContent');
@@ -299,7 +347,7 @@ test.describe('API 라우트 계약 (Gemini 모드)', () => {
 
   test('/api/relevance: 주제 핵심어 직접 질문은 Gemini를 부르지 않고 허용한다', async () => {
     mockGemini(() => jsonReply({}));
-    const res = await relevanceHandler(appRequest('/api/relevance', {
+    const res = await relevanceHandler(student('/api/relevance', {
       topic: '강화 부근리 지석묘', sourceText: '지석묘 자료', userText: '지석묘는 왜 만들었어?',
     }));
     expect(await res.json()).toEqual({ relevant: true, reason: 'direct_topic_keyword', redirect: '' });
@@ -308,7 +356,7 @@ test.describe('API 라우트 계약 (Gemini 모드)', () => {
 
   test('/api/relevance: 구조화 응답을 기존 스키마로 돌려준다', async () => {
     mockGemini(() => jsonReply(textCandidate(JSON.stringify({ relevant: false, reason: 'off_topic', redirect: '조사 주제로 돌아가 볼까요?', extra: '숨김' }))));
-    const res = await relevanceHandler(appRequest('/api/relevance', {
+    const res = await relevanceHandler(student('/api/relevance', {
       topic: '강화 부근리 지석묘', sourceText: '지석묘 자료', userText: '아이돌 좋아해?',
     }));
     expect(res.status).toBe(200);
@@ -318,7 +366,7 @@ test.describe('API 라우트 계약 (Gemini 모드)', () => {
 
   test('/api/relevance: JSON 파싱 실패는 내부 응답을 노출하지 않고 relevance_check_failed로 끝낸다', async () => {
     mockGemini(() => jsonReply(textCandidate('내부 응답 원문')));
-    const res = await relevanceHandler(appRequest('/api/relevance', {
+    const res = await relevanceHandler(student('/api/relevance', {
       topic: '강화 부근리 지석묘', sourceText: '지석묘 자료', userText: '오늘 뭐 먹지?',
     }));
     const text = await res.text();
@@ -326,45 +374,157 @@ test.describe('API 라우트 계약 (Gemini 모드)', () => {
     expect(text).not.toContain('내부 응답 원문');
   });
 
-  test('/api/relevance: 키가 없으면 401 missing_key로 알린다', async () => {
-    const res = await relevanceHandler(appRequest('/api/relevance', {
+  test('/api/relevance: 학급 코드가 없으면 401 class_code_required로 알린다', async () => {
+    const res = await relevanceHandler(student('/api/relevance', {
       topic: '강화 부근리 지석묘', sourceText: '지석묘 자료', userText: '오늘 뭐 먹지?',
-    }, { key: null }));
+    }, { classCode: null }));
     expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ relevant: false, code: 'missing_key' });
+    expect(await res.json()).toMatchObject({ relevant: false, code: 'class_code_required' });
   });
 
   test('/api/extract-sign-text: 이미지 텍스트를 추출하고 형식·용량 제한을 유지한다', async () => {
     mockGemini(() => jsonReply(textCandidate(JSON.stringify({ text: '국보 제1호', warnings: [] }))));
-    const ok = await signTextHandler(appRequest('/api/extract-sign-text', { image: TINY_PNG }));
+    const ok = await signTextHandler(student('/api/extract-sign-text', { image: TINY_PNG }));
     expect(await ok.json()).toEqual({ text: '국보 제1호', warnings: [] });
 
-    const gif = await signTextHandler(appRequest('/api/extract-sign-text', { image: 'data:image/gif;base64,AAAA' }));
+    const gif = await signTextHandler(student('/api/extract-sign-text', { image: 'data:image/gif;base64,AAAA' }));
     expect(gif.status).toBe(400);
 
-    const huge = await signTextHandler(appRequest('/api/extract-sign-text', { image: `data:image/png;base64,${'A'.repeat(11_000_001)}` }));
+    const huge = await signTextHandler(student('/api/extract-sign-text', { image: `data:image/png;base64,${'A'.repeat(11_000_001)}` }));
     expect(huge.status).toBe(400);
     expect(calls).toHaveLength(1);
   });
 
   test('/api/extract-sign-text: 429는 사용량 안내 code로 전달한다', async () => {
     mockGemini(() => jsonReply({ error: { status: 'RESOURCE_EXHAUSTED' } }, 429));
-    const res = await signTextHandler(appRequest('/api/extract-sign-text', { image: TINY_PNG }));
+    const res = await signTextHandler(student('/api/extract-sign-text', { image: TINY_PNG }));
     expect(res.status).toBe(429);
     expect(await res.json()).toMatchObject({ code: 'rate_limited' });
   });
 
   test('/api/verify-ai-key: 성공과 잘못된 키를 구분한다', async () => {
     mockGemini(() => jsonReply({ name: `models/${GEMINI_MODEL}` }));
-    const ok = await verifyKeyHandler(appRequest('/api/verify-ai-key', undefined));
+    const ok = await verifyKeyHandler(appRequest('/api/verify-ai-key', undefined, { teacherKey: FAKE_KEY }));
     expect(await ok.json()).toEqual({ ok: true, provider: 'gemini', model: GEMINI_MODEL });
 
     mockGemini(() => jsonReply({ error: { status: 'INVALID_ARGUMENT', message: 'API key not valid.' } }, 400));
-    const bad = await verifyKeyHandler(appRequest('/api/verify-ai-key', undefined));
+    const bad = await verifyKeyHandler(appRequest('/api/verify-ai-key', undefined, { teacherKey: FAKE_KEY }));
     expect(bad.status).toBe(401);
     const text = await bad.text();
     expect(JSON.parse(text).code).toBe('invalid_key');
     expect(text).not.toContain(FAKE_KEY);
+  });
+});
+
+test.describe('학급 코드', () => {
+  test('학생이 입력한 코드를 "학교이름-숫자4자리"로 맞추고, 형식이 다르면 거절한다', () => {
+    expect(normalizeClassCode(' 해원초 - 4821 ')).toBe('해원초-4821');
+    expect(normalizeClassCode('해원초–4821')).toBe('해원초-4821');
+    expect(normalizeClassCode('해원초-４８２１')).toBe('해원초-4821');
+    expect(normalizeClassCode('해원초4821')).toBe('');
+    expect(normalizeClassCode('해원초-482')).toBe('');
+    expect(normalizeClassCode('해원(초)-4821')).toBe('');
+  });
+
+  test('만료 시각은 발급한 날 한국 시간 자정이다', () => {
+    // 2026-09-30 23:59 KST → 2026-10-01 00:00 KST
+    expect(nextKstMidnight(Date.UTC(2026, 8, 30, 14, 59))).toBe(Date.UTC(2026, 8, 30, 15, 0));
+    // 2026-10-01 00:00 KST(정각) → 다음 날 자정
+    expect(nextKstMidnight(Date.UTC(2026, 8, 30, 15, 0))).toBe(Date.UTC(2026, 9, 1, 15, 0));
+  });
+
+  test('교사 키는 암호화해 저장하고, 관리 토큰은 해시만 저장한다', async () => {
+    const created = await createClass({ schoolName: '해원 초', apiKey: FAKE_KEY });
+    expect(created.code).toMatch(/^해원초-\d{4}$/);
+    expect(created.manageToken.length).toBeGreaterThanOrEqual(40);
+
+    const stored = [...upstash.raw.values()].map(entry => entry.value).join('\n');
+    expect(stored).not.toContain(FAKE_KEY);
+    expect(stored).not.toContain(created.manageToken);
+    await expect(resolveClassApiKey({ code: created.code, clientId: 'c1' })).resolves.toBe(FAKE_KEY);
+  });
+
+  test('만료된 학급 코드는 쓸 수 없다', async () => {
+    const past = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    const created = await createClass({ schoolName: '해원초', apiKey: FAKE_KEY, now: past });
+    await expect(resolveClassApiKey({ code: created.code, clientId: 'c2' }))
+      .rejects.toMatchObject({ code: 'class_code_invalid' });
+  });
+
+  test(`틀린 코드를 ${DEFAULT_CLASS_FAILURE_LIMIT}번 넣으면 맞는 코드도 잠시 막는다`, async () => {
+    const created = await createClass({ schoolName: '해원초', apiKey: FAKE_KEY });
+    for (let i = 0; i < DEFAULT_CLASS_FAILURE_LIMIT; i++) {
+      await expect(resolveClassApiKey({ code: '해원초-0000', clientId: 'guesser' }))
+        .rejects.toMatchObject({ code: expect.stringMatching(/class_code_invalid/) });
+    }
+    await expect(resolveClassApiKey({ code: created.code, clientId: 'guesser' }))
+      .rejects.toMatchObject({ code: 'too_many_attempts', status: 429 });
+    // 다른 접속자는 영향을 받지 않는다.
+    await expect(resolveClassApiKey({ code: created.code, clientId: 'student' })).resolves.toBe(FAKE_KEY);
+  });
+
+  test('암호화 비밀값이 없으면 학급 기능을 쓰지 않는다', async () => {
+    const saved = process.env.CLASS_KEY_SECRET;
+    delete process.env.CLASS_KEY_SECRET;
+    try {
+      await expect(createClass({ schoolName: '해원초', apiKey: FAKE_KEY }))
+        .rejects.toMatchObject({ code: 'class_unavailable' });
+    } finally {
+      process.env.CLASS_KEY_SECRET = saved;
+    }
+  });
+
+  test('학급 API: 만들기 → 참여 → 키 교체 → 삭제, 응답에 키가 없다', async () => {
+    const SECOND_KEY = 'unit-second-fake-key-not-real-9876';
+    mockGemini(() => jsonReply({ name: `models/${GEMINI_MODEL}` }));
+
+    const createRes = await classCreateHandler(appRequest('/api/class/create', { schoolName: '해원초' }, { teacherKey: FAKE_KEY }));
+    const createText = await createRes.text();
+    const created = JSON.parse(createText);
+    expect(createRes.status).toBe(200);
+    expect(createRes.headers.get('Cache-Control')).toBe('no-store');
+    expect(created).toMatchObject({ ok: true, school: '해원초' });
+    expect(created.code).toMatch(/^해원초-\d{4}$/);
+    expect(createText).not.toContain(FAKE_KEY);
+    // 학급을 만들기 전에 Gemini로 키를 확인한다(생성 요청이 아닌 모델 조회).
+    expect(calls[0]).toMatchObject({ method: 'GET' });
+
+    const joinRes = await classJoinHandler(appRequest('/api/class/join', { code: ` ${created.code} ` }));
+    const joinText = await joinRes.text();
+    expect(JSON.parse(joinText)).toEqual({ ok: true, code: created.code, school: '해원초', expiresAt: created.expiresAt });
+    expect(joinText).not.toContain(FAKE_KEY);
+
+    const forbidden = await classUpdateHandler(appRequest('/api/class/update', { code: created.code }, { teacherKey: SECOND_KEY, manageToken: 'wrong-token' }));
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toMatchObject({ code: 'forbidden' });
+
+    const updated = await classUpdateHandler(appRequest('/api/class/update', { code: created.code }, { teacherKey: SECOND_KEY, manageToken: created.manageToken }));
+    expect(updated.status).toBe(200);
+    await expect(resolveClassApiKey({ code: created.code, clientId: 'c3' })).resolves.toBe(SECOND_KEY);
+
+    const deleteForbidden = await classDeleteHandler(appRequest('/api/class/delete', { code: created.code }));
+    expect(deleteForbidden.status).toBe(403);
+    const deleted = await classDeleteHandler(appRequest('/api/class/delete', { code: created.code }, { manageToken: created.manageToken }));
+    expect(deleted.status).toBe(200);
+
+    const afterDelete = await classJoinHandler(appRequest('/api/class/join', { code: created.code }));
+    expect(afterDelete.status).toBe(401);
+    expect(await afterDelete.json()).toMatchObject({ code: 'class_code_invalid' });
+  });
+
+  test('학급 만들기: 잘못된 키나 학교 이름이면 저장하지 않는다', async () => {
+    mockGemini(() => jsonReply({ error: { status: 'INVALID_ARGUMENT', message: 'API key not valid.' } }, 400));
+    const badKey = await classCreateHandler(appRequest('/api/class/create', { schoolName: '해원초' }, { teacherKey: FAKE_KEY }));
+    expect(badKey.status).toBe(401);
+    expect(await badKey.json()).toMatchObject({ code: 'invalid_key' });
+
+    mockGemini(() => jsonReply({ name: `models/${GEMINI_MODEL}` }));
+    const badSchool = await classCreateHandler(appRequest('/api/class/create', { schoolName: '!!!' }, { teacherKey: FAKE_KEY }));
+    expect(badSchool.status).toBe(400);
+
+    const noKey = await classCreateHandler(appRequest('/api/class/create', { schoolName: '해원초' }));
+    expect(noKey.status).toBe(401);
+    expect(upstash.raw.size).toBe(0);
   });
 });
 

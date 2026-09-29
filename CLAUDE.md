@@ -32,7 +32,8 @@
 - Next.js 14.1 **pages router** (app router 아님), React 18, **JavaScript** (TypeScript 아님)
 - **AI 공급자는 `AI_PROVIDER`(gemini | openai)로 고른다. 공개용 기본값은 `gemini`다.** 값은 [next.config.js](next.config.js)의 `env`로 빌드 시점에 화면과 서버에 함께 주입된다([lib/aiProviderConfig.js](lib/aiProviderConfig.js)). 바꾸면 재빌드가 필요하다.
 - 모든 AI 라우트는 [lib/server/ai/provider.js](lib/server/ai/provider.js)의 공통 인터페이스(`generateStream`, `generateOnce`, `generateStructured`, `analyzeImage`, `validateCredential`)만 부른다. 라우트에서 공급자 SDK를 직접 부르지 않는다.
-- Gemini: REST API를 `fetch`로 직접 호출한다(SDK 미사용). 모델은 [lib/server/ai/gemini.js](lib/server/ai/gemini.js)의 `GEMINI_MODEL` **한 곳에서만** 관리한다 (현재 `gemini-3.5-flash`). 사용자가 브라우저에 저장한 키를 요청 헤더(`AI_KEY_HEADER`)로 받아 요청 처리 중에만 쓴다. 안전 필터는 `lib/server/ai/safety.js`에서 명시적으로 켠다. 운영 기준은 [docs/GEMINI_OPERATIONS.md](docs/GEMINI_OPERATIONS.md).
+- Gemini: REST API를 `fetch`로 직접 호출한다(SDK 미사용). 모델은 [lib/server/ai/gemini.js](lib/server/ai/gemini.js)의 `GEMINI_MODEL` **한 곳에서만** 관리한다 (현재 `gemini-3.5-flash`). 안전 필터는 `lib/server/ai/safety.js`에서 명시적으로 켠다.
+- **교사 키 + 학급 코드 구조**: 교사가 `/teacher`에서 자기 Gemini 키로 학급 코드(`학교이름-숫자4자리`, 한국 시간 자정 만료)를 만든다. 서버는 키를 AES-GCM(`CLASS_KEY_SECRET`)으로 암호화해 Upstash Redis(REST, `fetch`)에 저장하고, 학생 AI 요청의 학급 코드 헤더(`CLASS_CODE_HEADER`)로 찾아 요청 처리 중에만 복호화한다. **학생 브라우저에는 키를 절대 보내지 않는다.** 운영 기준은 [docs/GEMINI_OPERATIONS.md](docs/GEMINI_OPERATIONS.md).
 - OpenAI(롤백용): OpenAI SDK(`openai` v4), 서버 키 `OPENAI_API_KEY`. 채팅 모델은 [lib/server/chatApiShared.js](lib/server/chatApiShared.js)의 `MODEL` 상수에서 관리한다 (현재 `gpt-5.4-mini`). moderation(`omni-moderation-latest`)은 [lib/server/ai/openai.js](lib/server/ai/openai.js)에 있다.
 - **모든 `pages/api/*` 라우트는 Edge runtime이다.** Node 전용 API(`fs`, `path`, `Buffer` 등) 사용 금지.
 - 스타일: `styles/globals.css` 전역 CSS + 일부 CSS Module. CSS 프레임워크 없음.
@@ -48,12 +49,18 @@ pages/api/chat.js             AI 스트리밍 채팅 (Edge, SSE)
 pages/api/chat-once.js        SSE 차단 환경용 비스트리밍 fallback (Edge)
 pages/api/relevance.js        후속 질문 관련성 판단 (Edge, 구조화 출력)
 pages/api/extract-sign-text.js  표지판/안내문 사진 텍스트 추출 (Edge, 이미지 입력)
-pages/api/verify-ai-key.js    Gemini 키 연결 확인 (Edge, 생성 요청 없음)
+pages/api/verify-ai-key.js    교사 Gemini 키 연결 확인 (Edge, 생성 요청 없음)
+pages/api/class/*.js          학급 코드 만들기·참여·키 교체·삭제 (Edge, Upstash)
+pages/teacher.js              교사용 설정 화면 (한국어 고정, 번역 불필요)
 pages/api/recommended-videos.js 승인 채널 내 YouTube 추천 영상 검색 (Edge)
 lib/aiProviderConfig.js       AI 공급자 선택·키 헤더 이름·오류 code (화면·서버 공용)
 lib/server/ai/                공급자 공통 계층 (provider, gemini, openai, messages, errors, safety)
+lib/server/class/             학급 코드 (Upstash REST 클라이언트, 키 암호화, 코드 생성·만료·시도 제한)
 lib/server/chatApiShared.js   OpenAI 모델 상수 MODEL (롤백용)
-lib/useAiKey.js               Gemini 키 브라우저 보관 (sessionStorage 기본, 선택 시 localStorage)
+lib/useAiKey.js               교사 기기의 Gemini 키 보관 (sessionStorage 기본, 선택 시 localStorage)
+lib/useTeacherClasses.js      교사 기기에서 만든 학급 목록·관리 토큰
+lib/useClassSession.js        학생 학급 참여 상태 (코드·만료 시각, localStorage)
+lib/teacherText.js            교사용 화면 한국어 문구
 lib/aiRequestGuard.js         같은 AI 요청의 중복 전송 방지
 lib/systemPrompt.js           AI 시스템 프롬프트 생성
 lib/parseResponse.js          AI 응답 파싱 (태그 기반)
@@ -83,7 +90,10 @@ submission-demo/              데모 스냅샷 (local.json은 gitignore 대상)
 
 환경변수 (`.env.local`, 코드에 직접 넣지 않는다):
 
-- `AI_PROVIDER` — `gemini`(기본) | `openai`. Gemini 모드는 서버에 AI 키를 두지 않는다(사용자 키를 Vercel 환경변수로 저장 금지)
+- `AI_PROVIDER` — `gemini`(기본) | `openai`. Gemini 모드는 서버에 공용 AI 키를 두지 않는다(교사 키를 Vercel 환경변수로 저장 금지)
+- `UPSTASH_REDIS_REST_URL`·`UPSTASH_REDIS_REST_TOKEN` (또는 `KV_REST_API_URL`·`KV_REST_API_TOKEN`) — Gemini 모드 학급 코드 저장소
+- `CLASS_KEY_SECRET` — Gemini 모드 교사 키 암호화 비밀값(32자 이상). `CLASS_FAILURE_LIMIT` — 선택(기본 10)
+- `GEMINI_API_BASE_URL` — **테스트 전용**(가짜 Gemini 서버). 운영에 설정 금지
 - `OPENAI_API_KEY` — OpenAI 모드에서만 필요
 - `YOUTUBE_API_KEY` — 추천 영상 기능용, 선택
 - `NEXT_PUBLIC_OFFLINE_DEMO_MODE`, `NEXT_PUBLIC_SUBMISSION_MODE` — 빌드 스크립트가 설정
@@ -154,7 +164,8 @@ submission-demo/              데모 스냅샷 (local.json은 gitignore 대상)
 
 - Playwright는 실제 사용자 흐름 검증용. 기본 viewport 1920×1080 단일 project (`chromium-desktop-1920`). 모바일 테스트는 spec 파일에서 `test.use()`로 개별 오버라이드한다.
 - **실제 OpenAI·Gemini API를 테스트에서 호출하지 않는다.** 화면 테스트는 `page.route('**/api/chat', ...)` mock을, 서버 계층 테스트는 전역 `fetch` 대체를 쓴다 ([tests/smoke.spec.js](tests/smoke.spec.js), [tests/gemini-provider.spec.js](tests/gemini-provider.spec.js) 참고).
-- **playwright.config.js는 가짜 Gemini 키(`mnmGeminiApiKey`)도 기본 주입한다.** 키 설정 창이 클릭을 가로채지 않게 하기 위함이다. 키 흐름 자체는 [tests/gemini-key-settings.spec.js](tests/gemini-key-settings.spec.js)처럼 storageState를 오버라이드해 검증한다.
+- **playwright.config.js는 학급 참여 상태(`mnmClassSession`)도 기본 주입한다.** 학급 코드 창이 클릭을 가로채지 않게 하기 위함이다. 학급 흐름 자체는 [tests/class-code.spec.js](tests/class-code.spec.js)처럼 storageState를 오버라이드해 검증한다.
+- **Playwright는 가짜 외부 서비스 서버([tests/support/mock-upstash-server.js](tests/support/mock-upstash-server.js), 포트 3998)를 함께 띄운다.** Upstash와 서버에서 나가는 Gemini 요청(`GEMINI_API_BASE_URL`)을 대신하므로 교사→학생 흐름을 서버까지 거쳐 검증할 수 있다.
 - **playwright.config.js가 `storageState`로 `mnmHistoryResearchTutorialSeen=true`를 기본 주입한다.** 첫 방문 튜토리얼 모달이 클릭을 가로채지 않게 하기 위함이다. 첫 방문 동작 자체를 검증하려면 [tests/research-onboarding.spec.js](tests/research-onboarding.spec.js)처럼 storageState를 비워 오버라이드한다.
 - 새 기능에는 관련 테스트를 추가하거나 기존 테스트 영향 여부를 확인한다.
 - 외부 링크에는 `target="_blank"`와 `rel="noopener noreferrer"`, 유효한 `href`가 있어야 한다. 빈 링크(`#`) 금지.
@@ -183,7 +194,7 @@ submission-demo/              데모 스냅샷 (local.json은 gitignore 대상)
 - 요청 범위 밖의 코드를 바꾸지 않는다. diff는 목표 달성에 필요한 최소로 유지한다.
 - 작업지시서에 "하지 마라" 항목이 있으면 구현 후 `git diff`로 위반 0건을 자기검사한다.
 - 확실하지 않은 관례는 지어내지 말고 기존 코드에서 같은 패턴을 찾아 따른다 (예: `SectionCard` 사용법, i18n 키 구조).
-- UI 문자열을 추가하면 [lib/i18n.js](lib/i18n.js)의 12개 언어 + ko-easy 전부에 추가한다. 한 언어만 추가하고 끝내지 않는다.
+- UI 문자열을 추가하면 [lib/i18n.js](lib/i18n.js)의 12개 언어 + ko-easy 전부에 추가한다. 한 언어만 추가하고 끝내지 않는다. 예외: 한국어 고정 화면(`share.js`, 교사용 `teacher.js` — 문구는 `lib/teacherText.js`).
 - 테스트를 실행하지 않았으면 "완료"라고 말하지 않는다. 실패는 실패라고 정직하게 보고한다.
 - 에러가 나면 임의로 우회하지 말고 원인을 찾는다. 같은 명령 단순 재시도는 1회까지.
 - 반복 작업은 `.claude/skills/`의 스킬을 따른다: `ship`(커밋·푸시), `spec`(작업지시서 실행), `submission-check`(제출 패키지 검증), `protect`(회귀 점검).
@@ -216,7 +227,7 @@ commit을 제안하기 전에 아래를 모두 통과해야 한다:
 - API 키나 민감정보를 코드에 직접 넣는 작업
 - 쉬운한국어 모드에서 원문의 사실을 왜곡하거나, 단순 요약 기능으로 축소하는 수정
 - 실제 OpenAI·Gemini API를 테스트에서 반복 호출하는 구조
-- 사용자 AI 키를 서버 저장소·로그·URL·쿠키·산출물 전송에 남기는 수정
+- 교사 AI 키를 평문으로 저장하거나, 학생 브라우저·로그·URL·쿠키·산출물 전송에 노출하는 수정
 - 승인 채널 화이트리스트 밖의 YouTube 영상을 추천에 노출하는 수정
 
 ## 연구대회 제출 제약
@@ -234,7 +245,7 @@ commit을 제안하기 전에 아래를 모두 통과해야 한다:
 - 쉬운한국어 모드 (ko-easy)
 - 다국어 지원 (12개 언어, [lib/i18n.js](lib/i18n.js))
 - 후속 질문 채팅 (플로팅 마스코트 챗봇, SSE + 비스트리밍 fallback)
-- AI 공급자 전환(Gemini 기본 / OpenAI 롤백)과 Gemini 키 설정 창
+- AI 공급자 전환(Gemini 기본 / OpenAI 롤백), 교사용 설정(키 등록·학급 코드), 학생 학급 코드 입력
 - 생각 워크시트 (모드별 학생 활동 입력)
 - 퀴즈 생성 및 선택지 클릭
 - 학습 평가 (나 어땠어?) / 교과평어 생성

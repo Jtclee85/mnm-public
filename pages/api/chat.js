@@ -19,7 +19,7 @@ export default async function handler(req) {
     assertValidChatMessages(messages);
 
     const provider = getAiProvider();
-    const apiKey = resolveApiKey(req, provider);
+    const apiKey = await resolveApiKey(req, provider);
     const iterator = provider.generateStream({ messages, apiKey });
 
     // 첫 조각을 받은 뒤에 SSE를 시작한다. 키 오류·할당량 초과·안전 차단처럼 시작 단계에서
