@@ -46,17 +46,20 @@
 
 ## 현재 작업 인수인계
 
-- 상태: 완료
+- 상태: 로컬 완료, 미푸시 — 브랜치 `gemini-provider`에서 AI 공급자를 OpenAI → Gemini로 전환(로컬 커밋 1개). 사용자 확인 전이라 푸시·Vercel 설정 변경·배포는 하지 않음.
 - 마지막 담당: Claude Code
-- 기준 브랜치: `main` (작업 브랜치 `security-deps-update`는 main에 fast-forward 병합됨)
-- 마지막 완료 작업: npm 보안 경고 대응. 패치 버전 의존성 갱신(form-data, nanoid, mdast-util-to-hast, sharp)과 Next.js 14.1.0 → 14.2.35 업그레이드. 이 변경은 공개본에만 적용했고 원본 `mnm`은 14.1.0 그대로 둠.
+- 기준 브랜치: `main` (Production은 여전히 OpenAI 버전 `b527fd9`)
+- 마지막 완료 작업: Gemini 전환. `lib/server/ai/*` 공급자 계층, 네 AI 라우트(chat, chat-once, relevance, extract-sign-text)와 `verify-ai-key` 전환, 키 설정 창(`components/AiKeySettingsDialog.js`), 사용자 키 브라우저 보관(`lib/useAiKey.js`), 중복 요청 방지(`lib/aiRequestGuard.js`), 12개 언어 문자열. 모델 `gemini-3.5-flash`, 운영 기준은 `docs/GEMINI_OPERATIONS.md`.
+- **Production 차단 요건**: Gemini API 추가 약관(2026-04-28)은 18세 이상만 API를 쓸 수 있고, 18세 미만이 대상이거나 이용할 가능성이 높은 앱에 쓸 수 없다고 명시한다. 무료 등급 입력은 Google 제품 개선·사람 검토에 쓰일 수 있다. 공개 사이트에서 Gemini 모드를 켜기 전에 사용자 결정이 필요하다(`docs/GEMINI_OPERATIONS.md` 마지막 절).
 - 공개 URL: `https://mnm-public.vercel.app`
 - 보호 대상: 원본 `Jtclee85/mnm`, 원본 Vercel 프로젝트 `mnm`
-- 알려진 설정: 공개용 `OPENAI_API_KEY`와 `YOUTUBE_API_KEY`가 Vercel Production에 저장됨. `YOUTUBE_API_KEY`는 원본 심사본과 **같은 키**라 YouTube 일일 할당량을 공유한다. Preview 배포는 Vercel 로그인 보호가 걸려 있고 API 키도 없어 외부 API 검증에 쓸 수 없다.
-- 검증 상태 (2026-09-29): 전체 E2E 123 통과 / 2 실패 / 11 skip, `npm run build`와 `npm run build:offline-demo` 성공. 프로덕션 배포 후 `/`, `/share` 200, `/api/chat` SSE 스트리밍, `/api/chat-once`, `/api/recommended-videos` 실제 응답 확인(각 1회 호출).
-- 알려진 실패 (의존성 변경과 무관, 기존부터 존재): `tests/offline-demo.spec.js`의 `[demo-reviewer-guide]`, `[demo-starts-on-input-screen]` 2개. 테스트가 원본에만 있는 gitignore 파일 `submission-demo/demo-snapshot.local.json`(주제 "강화 고인돌")을 가정하지만, 공개본에는 없어 `demo-snapshot.example.json`(성덕대왕신종)이 쓰인다. 실제 사용 데이터이므로 복사하지 않는다. 수정하려면 테스트가 스냅샷 주제를 파일에서 읽게 바꿔야 한다.
+- 알려진 설정: 공개용 `OPENAI_API_KEY`와 `YOUTUBE_API_KEY`가 Vercel Production에 저장됨. `YOUTUBE_API_KEY`는 원본 심사본과 **같은 키**라 YouTube 일일 할당량을 공유한다. `AI_PROVIDER`는 Vercel에 아직 없음 — 이 브랜치를 그대로 배포하면 코드 기본값 `gemini`가 된다. 기존 동작을 유지하려면 배포 전에 `AI_PROVIDER=openai`를 설정해야 한다. Preview 배포는 Vercel 로그인 보호가 걸려 있고 API 키도 없어 외부 API 검증에 쓸 수 없다.
+- 검증 상태 (2026-09-29, `gemini-provider`): 전체 E2E 172 통과 / 2 실패 / 11 skip (신규 `tests/gemini-provider.spec.js` 28개, `tests/gemini-key-settings.spec.js` 21개 포함). `npm run build`(gemini), `AI_PROVIDER=openai` 빌드와 실행 확인(키 창 없음, verify가 openai 응답), `npm run build:offline-demo` 성공. 실제 Gemini·OpenAI API는 호출하지 않았다(전부 mock) — 실제 키로 품질 점검은 아직 안 함.
+- 주의: `npm run build:offline-demo` 뒤에는 `.next/required-server-files.json`이 덮어써지므로, `next start`로 확인하려면 일반 빌드를 다시 한다.
+- 알려진 실패 (Gemini 변경과 무관, 기존부터 존재): `tests/offline-demo.spec.js`의 `[demo-reviewer-guide]`, `[demo-starts-on-input-screen]` 2개. 테스트가 원본에만 있는 gitignore 파일 `submission-demo/demo-snapshot.local.json`(주제 "강화 고인돌")을 가정하지만, 공개본에는 없어 `demo-snapshot.example.json`(성덕대왕신종)이 쓰인다. 실제 사용 데이터이므로 복사하지 않는다. 수정하려면 테스트가 스냅샷 주제를 파일에서 읽게 바꿔야 한다.
 - 알려진 빌드 경고: Edge 라우트에서 `openai/core.mjs`의 `process.version/platform/arch` 사용 경고. 실제 Edge 실행은 정상 확인됨.
 - 남은 보안 경고: `npm audit` 2건(next critical, postcss high). next 관련 권고는 34건에서 23건으로 감소. 남은 권고는 주로 App Router, Server Components/Actions, 미들웨어, rewrites, 자체 호스팅 이미지 최적화 대상이며 이 앱(Pages Router, 미들웨어·rewrites 없음, Vercel 호스팅)과 직접 관련이 적다. 완전 해결은 `next@16`(주 버전 2단계 상승, React 19 필요 가능성) 업그레이드가 필요하므로 사용자 확인 후 별도 브랜치에서 진행한다.
-- 다음 에이전트 시작점: 사용자 요청을 확인한다. Next 16 업그레이드 요청 시 공식 마이그레이션 가이드와 React 버전 요구사항부터 확인한다.
+- 남은 확인: 키 설정 창 번역(ko 외 11개 언어) 원어민 검수, 실제 무료 키로 네 모드·쉬운한국어·챗봇·사진 읽기 소량 수동 점검.
+- 다음 에이전트 시작점: 사용자에게 `gemini-provider` 브랜치 푸시 여부와 연령 약관 차단 요건에 대한 결정을 확인한다. 결정 전에는 main 병합·Vercel 설정 변경·배포를 하지 않는다. Next 16 업그레이드 요청 시 공식 마이그레이션 가이드와 React 버전 요구사항부터 확인한다.
 
 작업을 마칠 때 위 항목을 덮어써서 최신 상태만 유지한다. 과거 이력이 필요하면 Git 로그를 사용한다.

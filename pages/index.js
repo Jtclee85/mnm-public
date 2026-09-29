@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 
@@ -15,11 +15,21 @@ import ResearchCompass from '../components/ResearchCompass';
 import ResearchTutorialQuest, { TUTORIAL_QUESTS } from '../components/ResearchTutorialQuest';
 import AppUsageTutorial, { APP_TUTORIAL_SCENES } from '../components/AppUsageTutorial';
 import SubmissionStartScreen from '../components/SubmissionStartScreen';
+import AiKeySettingsDialog from '../components/AiKeySettingsDialog';
 
 import { createSystemMessage, createChatSystemMessage, createEvaluationSystemMessage } from '../lib/systemPrompt';
 import { parseSectionedResponse, parseQuizBlock, extractTagBlock, copyText, DEFAULT_STUDENT_LEVEL } from '../lib/parseResponse';
 import { useStudentNotes } from '../lib/useStudentNotes';
 import { useSessionSave } from '../lib/useSessionSave';
+import { useAiKey, maskAiKey } from '../lib/useAiKey';
+import {
+  AI_ERROR_CODES,
+  AI_KEY_ERROR_CODES,
+  REQUIRES_USER_AI_KEY,
+  isClassifiedAiError,
+} from '../lib/aiProviderConfig';
+import { beginAiRequest, fingerprintAiRequest } from '../lib/aiRequestGuard';
+import { isDirectTopicQuestion } from '../lib/chatRelevance';
 import { migrateLegacyWorksheetFields, getLegacyEvidenceFields } from '../lib/modeWorksheetFields';
 import { buildModeInputs, truncateForShare } from '../lib/shareArtifact';
 import { encodeShareData } from '../lib/shareUtils';
@@ -165,6 +175,17 @@ export default function Home({
   // 분석 실패 원인 — 자료 입력 카드에 에러 박스로 표시한다.
   // (예: 서버의 "입력 자료가 너무 깁니다" 400 응답이 빈 결과 안내에 덮이지 않게)
   const [analysisError, setAnalysisError] = useState('');
+  // 실패 원인 code — 키 문제면 에러 박스에 'API 키 설정 열기' 버튼을 함께 보여준다.
+  const [analysisErrorCode, setAnalysisErrorCode] = useState('');
+
+  // 공개용 Gemini 모드: 사용자가 자기 기기에 저장한 키로 AI를 호출한다.
+  // 오프라인 시연은 API를 전혀 부르지 않으므로 키를 요구하지 않는다.
+  const aiKey = useAiKey();
+  const aiKeyRequired = REQUIRES_USER_AI_KEY && !demoMode;
+  const [aiKeyDialogOpen, setAiKeyDialogOpen] = useState(false);
+  const [aiKeyDialogNotice, setAiKeyDialogNotice] = useState('');
+  // '나중에 설정'을 누르면 이번 방문에서는 자동으로 다시 열지 않는다(다음 방문에는 다시 안내).
+  const [aiKeyPromptDismissed, setAiKeyPromptDismissed] = useState(false);
 
   // 긴 자료 안내 — 자료를 차단하는 대신 핵심 중심으로 잘라 분석한다는 알림
   const [analysisNotice, setAnalysisNotice] = useState('');
@@ -313,6 +334,40 @@ export default function Home({
 
   const isBusy = loadingMode !== null || isAnalyzing;
 
+  // ── Gemini API 키 안내 ──
+  // 사용법(완료·나중에 보기·다시 보지 않기 어느 쪽이든)과 자료조사 안내, 심사 시작화면이
+  // 모두 닫힌 뒤 키가 없으면 키 설정 창을 연다. 재방문 때 키가 저장돼 있으면 열지 않는다.
+  // '다시 보지 않기'(사용법 기록)와 키 저장 여부는 서로 다른 저장소 값으로 따로 관리한다.
+  useEffect(() => {
+    if (!aiKeyRequired || !aiKey.loaded || aiKey.hasKey || aiKeyPromptDismissed) return;
+    if (appTutorialOpen || tutorialOpen || submissionStartOpen || aiKeyDialogOpen) return;
+    setAiKeyDialogNotice('');
+    setAiKeyDialogOpen(true);
+  }, [aiKeyRequired, aiKey.loaded, aiKey.hasKey, aiKeyPromptDismissed, appTutorialOpen, tutorialOpen, submissionStartOpen, aiKeyDialogOpen]);
+
+  const openAiKeyDialog = (notice = '') => {
+    setAiKeyDialogNotice(notice);
+    setAiKeyDialogOpen(true);
+  };
+
+  const closeAiKeyDialog = () => {
+    setAiKeyDialogOpen(false);
+    setAiKeyDialogNotice('');
+    setAiKeyPromptDismissed(true);
+  };
+
+  // AI를 부르기 전 확인 — 키가 없으면 요청을 보내지 않고 키 설정 창으로 안내한다.
+  // 입력한 조사 주제·자료·채팅 입력은 그대로 둔다.
+  const ensureAiKey = () => {
+    if (!aiKeyRequired || aiKey.hasKey) return true;
+    openAiKeyDialog(t.aiKey.requiredNotice);
+    return false;
+  };
+
+  // 서버 오류 code를 현재 언어의 안내문으로 바꾼다. code가 없으면 서버 문구를 그대로 쓴다.
+  const aiErrorMessage = (code, fallback) =>
+    (code && t.aiKey.errors[code]) || fallback || t.processFailed;
+
   // ── 반응형 ──
   useEffect(() => {
     const fn = () => {
@@ -451,7 +506,7 @@ export default function Home({
     try {
       res = await fetch('/api/chat-once', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiKey.buildAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ messages: messageHistory })
       });
     } catch {
@@ -462,7 +517,11 @@ export default function Home({
     let data = {};
     try { data = await res.json(); } catch {}
 
-    if (!res.ok) throw new Error(data.error || fallbackFailedMsg);
+    if (!res.ok) {
+      const error = new Error(aiErrorMessage(data.code, data.error || fallbackFailedMsg));
+      error.code = data.code || '';
+      throw error;
+    }
     if (!data.content?.trim()) throw new Error(fallbackFailedMsg);
 
     return data.content.trim();
@@ -471,11 +530,35 @@ export default function Home({
   // ── SSE 스트리밍 (+ 실패 시 비스트리밍 fallback) ──
   // 학교망·보안 프로그램이 text/event-stream을 차단하는 환경에서도 답변이 나오도록,
   // /api/chat 스트리밍이 실패하면 /api/chat-once로 같은 요청을 한 번에 다시 받는다.
-  const requestStream = async (messageHistory, { onChunk, onDone, onError }) => {
+  // 키 오류·사용량 초과·안전 차단처럼 서버가 code로 분류한 오류는 다시 보내도 결과가 같고
+  // 무료 사용량만 쓰므로 fallback하지 않는다. onError는 (안내문, code)를 받는다.
+  const requestStream = async (messageHistory, { onChunk, onDone, onError }, { allowRepeat = false } = {}) => {
     if (demoMode) {
       onDone?.(DEMO_CHAT_NOTICE);
       return;
     }
+
+    if (!ensureAiKey()) {
+      onError?.(t.aiKey.errors[AI_ERROR_CODES.MISSING_KEY], AI_ERROR_CODES.MISSING_KEY);
+      return;
+    }
+
+    // 같은 요청이 진행 중이거나 방금 성공했다면 보내지 않는다(버튼 연타·중복 이벤트 방지).
+    const release = beginAiRequest(fingerprintAiRequest(messageHistory), { allowRepeat });
+    if (!release) {
+      onError?.(t.aiKey.errors[AI_ERROR_CODES.DUPLICATE_REQUEST], AI_ERROR_CODES.DUPLICATE_REQUEST);
+      return;
+    }
+
+    const finish = (fullText) => {
+      release({ succeeded: true });
+      onDone?.(fullText);
+    };
+    const fail = (message, code = '') => {
+      release({ succeeded: false });
+      if (AI_KEY_ERROR_CODES.has(code)) openAiKeyDialog(message);
+      onError?.(message, code);
+    };
 
     let streamedText = '';
 
@@ -486,13 +569,14 @@ export default function Home({
         console.warn('[chat fallback] 스트리밍 실패 후 비스트리밍으로 성공');
         // 스트리밍 UI와 호환되도록 전체 답변을 한 번에 전달
         onChunk?.(fullText, fullText);
-        onDone?.(fullText);
+        finish(fullText);
       } catch (fallbackError) {
-        console.error('[chat fallback] 비스트리밍도 실패:', fallbackError);
-        onError?.(
+        console.error('[chat fallback] 비스트리밍도 실패:', fallbackError?.code || fallbackError?.message || fallbackError);
+        fail(
           fallbackError instanceof Error
             ? fallbackError.message
-            : (t.chatFallbackFailed || t.processFailed)
+            : (t.chatFallbackFailed || t.processFailed),
+          fallbackError?.code || ''
         );
       }
     };
@@ -512,18 +596,24 @@ export default function Home({
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiKey.buildAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ messages: messageHistory })
       });
 
       if (!res.ok) {
         let errMsg = t.processFailed;
-        try { const body = await res.json(); if (body.error) errMsg = body.error; } catch {}
-        // 400(입력 문제)·405·429(사용량 초과)는 비스트리밍으로 다시 보내도 같은 결과이므로 바로 오류 처리
-        if (res.status === 400 || res.status === 405 || res.status === 429) {
-          onError?.(errMsg);
+        let errCode = '';
+        try {
+          const body = await res.json();
+          if (body.error) errMsg = body.error;
+          if (body.code) errCode = body.code;
+        } catch {}
+        // 분류된 공급자 오류와 400(입력 문제)·401·403·405·429(사용량 초과)는
+        // 비스트리밍으로 다시 보내도 같은 결과이므로 바로 오류 처리
+        if (isClassifiedAiError(errCode) || [400, 401, 403, 405, 429].includes(res.status)) {
+          fail(aiErrorMessage(errCode, errMsg), errCode);
         } else {
-          await runFallback(`stream status ${res.status}: ${errMsg}`);
+          await runFallback(`stream status ${res.status}`);
         }
         return;
       }
@@ -563,25 +653,25 @@ export default function Home({
         return;
       }
 
-      onDone?.(streamedText);
+      finish(streamedText);
     } catch (error) {
-      console.error('[chat stream] 오류:', error);
+      console.error('[chat stream] 오류:', error?.message || error);
 
       // 답변 대부분이 이미 화면에 표시된 뒤 끝부분에서 끊긴 경우 —
-      // fallback으로 다시 생성하면 내용이 중복·변형되므로 받은 것까지로 완료 처리
+      // fallback으로 다시 생성하면 내용이 중복·변형되고 사용량도 두 번 쓰므로 받은 것까지로 완료 처리
       if (streamedText.trim().length >= 20) {
-        onDone?.(streamedText);
+        finish(streamedText);
         return;
       }
 
       // 학교망·보안 프로그램의 SSE 차단, 네트워크 끊김 등은 여기로 들어온다
-      await runFallback(error);
+      await runFallback(error?.message || 'stream error');
     }
   };
 
-  const streamOnce = (messages) =>
+  const streamOnce = (messages, options) =>
     new Promise((resolve, reject) => {
-      requestStream(messages, { onDone: resolve, onError: reject });
+      requestStream(messages, { onDone: resolve, onError: reject }, options);
     });
 
   // ── 시스템 프롬프트 빌더 ──
@@ -622,6 +712,7 @@ export default function Home({
 
     let success = false;
     let errorMessage = '';
+    let errorCode = '';
     await new Promise(resolve => {
       requestStream(
         [sysMsg, { role: 'user', content: '원본 자료를 분석해서 모드에 맞는 학습 결과를 만들어 줘.' }],
@@ -631,21 +722,40 @@ export default function Home({
             success = true;
             resolve();
           },
-          onError: (msg) => {
-            console.error(`[analyzeForMode:${mode}]`, msg);
+          onError: (msg, code) => {
+            console.error(`[analyzeForMode:${mode}]`, code || msg);
             errorMessage = typeof msg === 'string' && msg ? msg : t.analysisFailed;
+            errorCode = code || '';
             resolve();
           }
         }
       );
     });
 
+    // 같은 요청이 이미 진행 중이라 막힌 호출은 화면 상태를 건드리지 않는다.
+    // 진행 중인 원래 요청이 끝나면서 로딩 표시를 정리한다.
+    if (errorCode === AI_ERROR_CODES.DUPLICATE_REQUEST) {
+      return { success: false, error: '', code: errorCode };
+    }
+
     setLoadingMode(null);
-    return { success, error: errorMessage };
+    return { success, error: errorMessage, code: errorCode };
   };
 
   // ── 분석 시작 ──
+  // 버튼 비활성화는 다음 렌더에서야 반영되므로, 같은 순간의 연속 클릭은 ref로 막는다.
+  const analyzeLockRef = useRef(false);
   const handleAnalyze = async () => {
+    if (analyzeLockRef.current) return;
+    analyzeLockRef.current = true;
+    try {
+      await runAnalyze();
+    } finally {
+      analyzeLockRef.current = false;
+    }
+  };
+
+  const runAnalyze = async () => {
     const trimmedTopic  = topic.trim();
     const trimmedSource = sourceText.trim();
 
@@ -653,6 +763,7 @@ export default function Home({
     if (trimmedSource.length < 50)  { alert(t.shortSource); return; }
 
     setAnalysisError('');
+    setAnalysisErrorCode('');
 
     // 긴 자료는 차단하지 않는다 — 핵심 중심으로 잘라 보낸다는 안내만 하고 계속 진행
     setAnalysisNotice(
@@ -689,6 +800,9 @@ export default function Home({
     }
 
     setUsingAppTutorialPreset(false);
+
+    // 키가 없으면 분석을 시작하지 않고 키 설정 창을 연다. 입력한 주제와 자료는 그대로 남는다.
+    if (!ensureAiKey()) return;
 
     if (demoMode) {
       // 실제 온라인 분석과 동일한 흐름으로 로딩 화면을 먼저 보여준다.
@@ -729,6 +843,7 @@ export default function Home({
     setCanvasOpen(true);
 
     const result = await analyzeForMode('understand');
+    if (result.code === AI_ERROR_CODES.DUPLICATE_REQUEST) return;
 
     // 일반 흐름은 캔버스를 닫아 빈 결과 안내가 실제 오류를 덮지 않게 한다.
     // 다만 앱 사용법의 분석 장면에서는 캔버스를 닫으면 로딩 직후 첫 화면으로
@@ -736,6 +851,7 @@ export default function Home({
     if (!result.success) {
       const message = result.error || t.analysisFailed;
       setAnalysisError(message);
+      setAnalysisErrorCode(result.code || '');
       setCanvasOpen(appTutorialOpen && activeAppTutorialScene?.id === 'analyze');
       setLeftPanelTab('source');
       setConversation([{ role: 'assistant', content: message }]);
@@ -767,6 +883,7 @@ export default function Home({
       return;
     }
     if (!hasModeResult(mode) && loadingMode === null && !isAnalyzing) {
+      if (!ensureAiKey()) return;
       await analyzeForMode(mode);
     }
   };
@@ -892,6 +1009,8 @@ export default function Home({
       return;
     }
 
+    if (isBusy || !ensureAiKey()) return;
+
     setIsAnalyzing(true);
     setLoadingTool(toolKey ?? null);
 
@@ -901,8 +1020,9 @@ export default function Home({
 
     try {
       let fullText = await streamOnce(messages);
+      // 필요한 태그가 빠진 응답만 한 번 더 받는다(의도된 재요청이라 중복 방지 예외).
       if (retryTag && !extractTagBlock(fullText, retryTag)) {
-        fullText = await streamOnce(messages);
+        fullText = await streamOnce(messages, { allowRepeat: true });
       }
       onDone(parseSectionedResponse(fullText));
     } catch (errorMsg) {
@@ -929,6 +1049,7 @@ export default function Home({
       setToolResults(prev => ({ ...prev, evaluation: DEMO_CHAT_NOTICE }));
       return;
     }
+    if (isBusy || !ensureAiKey()) return;
     setIsAnalyzing(true);
     setLoadingTool('evaluation');
 
@@ -938,7 +1059,7 @@ export default function Home({
 
     try {
       let fullText = await streamOnce(messages);
-      if (!fullText.trim()) fullText = await streamOnce(messages);
+      if (!fullText.trim()) fullText = await streamOnce(messages, { allowRepeat: true });
       setToolResults(prev => ({ ...prev, evaluation: fullText.trim() || t.evaluationFailed }));
     } catch (errorMsg) {
       alert(typeof errorMsg === 'string' ? errorMsg : t.processFailed);
@@ -960,10 +1081,15 @@ export default function Home({
     if (demoMode) {
       return { relevant: true, redirect: '' };
     }
+    // 조사 주제를 직접 묻는 질문은 서버와 같은 로컬 규칙으로 바로 허용한다.
+    // 관련성 판정 API를 부르지 않아 무료 사용량을 아낀다. 안전 검사는 이어지는 답변 요청에서 한다.
+    if (isDirectTopicQuestion(topic, userText)) {
+      return { relevant: true, redirect: '' };
+    }
     try {
       const res = await fetch('/api/relevance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiKey.buildAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           topic,
           sourceText: buildSourceTextForAnalysis(sourceText).slice(0, 6000),
@@ -974,6 +1100,12 @@ export default function Home({
       });
 
       const data = await res.json().catch(() => ({}));
+      // 키·사용량 문제는 '주제와 관련 없는 질문'이 아니므로 그 원인을 그대로 안내한다.
+      if (!res.ok && data.code) {
+        const message = aiErrorMessage(data.code, data.error);
+        if (AI_KEY_ERROR_CODES.has(data.code)) openAiKeyDialog(message);
+        return { relevant: false, redirect: message };
+      }
       return {
         relevant: res.ok && data.relevant === true,
         redirect: data.redirect || t.irrelevantRedirect,
@@ -990,7 +1122,10 @@ export default function Home({
   // ── 후속 질문 채팅 ──
   const handleFollowUpChat = async (customPrompt) => {
     const userText = (customPrompt ?? chatInput).trim();
-    if (!userText || isBusy) return;
+    // 답변을 기다리는 중에는 새 질문을 보내지 않는다(Enter 연타로 같은 요청이 두 번 나가는 것 방지).
+    if (!userText || isBusy || isChatLoading) return;
+    // 키가 없으면 질문을 보내지 않고 입력한 질문도 그대로 둔 채 키 설정 창을 연다.
+    if (!demoMode && !ensureAiKey()) return;
 
     const userMessage          = { role: 'user',      content: userText };
     const assistantPlaceholder = { role: 'assistant', content: '' };
@@ -1210,6 +1345,16 @@ export default function Home({
       >
         {activeTutorialText.reopen}
       </button>
+      {aiKeyRequired && (
+        <button
+          type="button"
+          data-testid="open-ai-key-settings-button"
+          style={styles.tutorialHelpBtn}
+          onClick={() => openAiKeyDialog()}
+        >
+          {t.aiKey.openSettings}
+        </button>
+      )}
       <button style={styles.goHomeBtn} onClick={handleGoHome}>
         {t.goHome}
       </button>
@@ -1299,7 +1444,15 @@ export default function Home({
                 <div style={styles.formGroup}>
                   <div style={styles.sourceLabelRow}>
                     <label style={styles.label}>{t.sourceLabel}</label>
-                    <SignTextReader isMobile={isMobile} onExtracted={handleSignTextExtracted} t={t} demoMode={demoMode} />
+                    <SignTextReader
+                      isMobile={isMobile}
+                      onExtracted={handleSignTextExtracted}
+                      t={t}
+                      demoMode={demoMode}
+                      buildAiHeaders={aiKey.buildAiHeaders}
+                      ensureAiKey={ensureAiKey}
+                      onAiKeyError={openAiKeyDialog}
+                    />
                   </div>
                   <textarea
                     data-testid="source-textarea"
@@ -1315,6 +1468,18 @@ export default function Home({
                 {analysisError && (
                   <div role="alert" data-testid="analysis-error" style={styles.analysisErrorBox}>
                     ⚠️ {analysisError}
+                    {aiKeyRequired && AI_KEY_ERROR_CODES.has(analysisErrorCode) && (
+                      <div>
+                        <button
+                          type="button"
+                          data-testid="analysis-error-open-key-settings"
+                          style={styles.analysisErrorKeyBtn}
+                          onClick={() => openAiKeyDialog()}
+                        >
+                          {t.aiKey.openFromError}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1564,6 +1729,28 @@ export default function Home({
           scenes={activeAppTutorialScenes}
           showDontShowAgain={!demoMode}
         />
+
+        {/* Gemini API 키 설정 — 사용법을 마친 뒤, 키 없이 AI 기능을 눌렀을 때, 머리글 버튼으로 연다 */}
+        {aiKeyRequired && (
+          <AiKeySettingsDialog
+            isOpen={aiKeyDialogOpen}
+            text={t.aiKey}
+            savedKeyMask={maskAiKey(aiKey.apiKey)}
+            savedRemember={aiKey.remember}
+            requiredNotice={aiKeyDialogNotice}
+            isMobile={isMobile}
+            onSave={(key, options) => {
+              aiKey.saveKey(key, options);
+              setAiKeyDialogNotice('');
+              if (AI_KEY_ERROR_CODES.has(analysisErrorCode)) {
+                setAnalysisError('');
+                setAnalysisErrorCode('');
+              }
+            }}
+            onDelete={aiKey.clearKey}
+            onClose={closeAiKeyDialog}
+          />
+        )}
 
         {/* 연구대회 심사용 시작화면 — 심사 모드에서만 기존 앱 위에 오버레이로 표시 */}
         {submissionStartOpen && (
@@ -1864,6 +2051,10 @@ const styles = {
     background: '#fff5f5', border: '1px solid #fecaca', color: '#b91c1c',
     borderRadius: 12, padding: '12px 14px', fontSize: 14, lineHeight: 1.6,
     marginBottom: 12, wordBreak: 'keep-all',
+  },
+  analysisErrorKeyBtn: {
+    marginTop: 8, border: '1px solid #b91c1c', background: '#fff', color: '#b91c1c',
+    borderRadius: 10, padding: '8px 14px', minHeight: 40, fontSize: 14, fontWeight: 800, cursor: 'pointer',
   },
   analysisNoticeBox: {
     background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8',

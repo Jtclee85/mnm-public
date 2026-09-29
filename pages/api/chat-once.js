@@ -1,13 +1,10 @@
-import {
-  MODEL,
-  getOpenAI,
-  jsonResponse,
-  validateChatMessages,
-  openaiErrorResponse,
-} from '../../lib/server/chatApiShared';
+import { getAiProvider, resolveApiKey } from '../../lib/server/ai/provider';
+import { AiError, aiErrorResponse, jsonResponse, logAiError } from '../../lib/server/ai/errors';
+import { assertValidChatMessages } from '../../lib/server/ai/safety';
+import { AI_ERROR_CODES } from '../../lib/aiProviderConfig';
 
 // /api/chat(SSE 스트리밍)이 학교망·보안 프로그램 등에서 차단될 때 쓰는
-// 비스트리밍 fallback. 검증·모델·정책은 chatApiShared로 /api/chat과 동일하다.
+// 비스트리밍 fallback. 검증·모델·안전 정책은 공급자 공통 계층으로 /api/chat과 동일하다.
 export const config = {
   runtime: 'edge',
 };
@@ -17,23 +14,15 @@ export default async function handler(req) {
     return jsonResponse({ error: 'Method Not Allowed' }, 405);
   }
 
-  const { messages } = await req.json();
-
-  const validationError = await validateChatMessages(messages);
-  if (validationError) return validationError;
-
   try {
-    const completion = await getOpenAI().chat.completions.create({
-      model: MODEL,
-      messages,
-      stream: false,
+    const { messages } = await req.json().catch(() => {
+      throw new AiError(AI_ERROR_CODES.INVALID_REQUEST);
     });
+    assertValidChatMessages(messages);
 
-    const content = completion.choices?.[0]?.message?.content?.trim() || '';
-
-    if (!content) {
-      return jsonResponse({ error: '빈 응답이 반환되었습니다.' }, 500);
-    }
+    const provider = getAiProvider();
+    const apiKey = resolveApiKey(req, provider);
+    const content = await provider.generateOnce({ messages, apiKey });
 
     return new Response(JSON.stringify({ content }), {
       status: 200,
@@ -43,7 +32,7 @@ export default async function handler(req) {
       },
     });
   } catch (error) {
-    console.error("OpenAI 비스트리밍 API 호출 오류:", error);
-    return openaiErrorResponse(error);
+    logAiError('chat-once', error);
+    return aiErrorResponse(error);
   }
 }

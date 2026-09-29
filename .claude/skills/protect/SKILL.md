@@ -7,7 +7,7 @@ description: 보호 기능 회귀 점검. 사용자가 "깨졌다/사라졌다/�
 
 ## 트리거
 - "○○ 기능이 사라졌다/깨졌다/안 된다" 리포트.
-- `parseResponse.js`, `systemPrompt.js`, `i18n.js`, `chatApiShared.js`, `index.js` 레이아웃 등 공용 파일을 수정한 뒤.
+- `parseResponse.js`, `systemPrompt.js`, `i18n.js`, `lib/server/ai/*`, `chatApiShared.js`, `index.js` 레이아웃 등 공용 파일을 수정한 뒤.
 
 ## 입력
 - (있으면) 깨진 기능에 대한 사용자 설명. 없으면 전체 점검.

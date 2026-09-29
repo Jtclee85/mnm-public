@@ -1,24 +1,48 @@
-import OpenAI from "openai";
 import { getLanguageOption } from "../../lib/i18n";
 import { isDirectTopicQuestion } from "../../lib/chatRelevance";
+import { getAiProvider, resolveApiKey } from "../../lib/server/ai/provider";
+import { aiErrorBody, logAiError, toAiError } from "../../lib/server/ai/errors";
+import { AI_ERROR_CODES } from "../../lib/aiProviderConfig";
 
 export const config = {
   runtime: 'edge',
 };
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const MODEL = "gpt-5.4-mini";
 const MAX_SOURCE_CHARS = 6000;
 const MAX_CONVERSATION_CHARS = 2500;
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
+
+// 키 누락·키 오류·사용량 초과는 화면이 키 설정 안내나 사용량 안내를 띄울 수 있도록
+// HTTP 상태와 code를 함께 돌려준다. 그 밖의 판정 실패는 기존처럼 200 + relevant:false다.
+const PASS_THROUGH_ERROR_CODES = new Set([
+  AI_ERROR_CODES.MISSING_KEY,
+  AI_ERROR_CODES.INVALID_KEY,
+  AI_ERROR_CODES.QUOTA_EXCEEDED,
+  AI_ERROR_CODES.RATE_LIMITED,
+]);
+
+const RELEVANCE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    relevant: { type: 'boolean' },
+    reason: { type: 'string' },
+    redirect: { type: 'string' },
+  },
+  required: ['relevant', 'reason', 'redirect'],
+};
+
+const relevanceResponse = (body, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 
 export default async function handler(req) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405, headers: jsonHeaders });
   }
 
-  const { topic = '', sourceText = '', userText = '', language = 'ko', conversation = [] } = await req.json();
+  const body = await req.json().catch(() => ({}));
+  const { topic = '', sourceText = '', userText = '', language = 'ko', conversation = [] } = body || {};
   const trimmedTopic = String(topic).trim();
   const trimmedSource = String(sourceText).trim();
   const trimmedUserText = String(userText).trim();
@@ -35,46 +59,21 @@ export default async function handler(req) {
     );
   }
 
-  try {
-    const modResult = await openai.moderations.create({
-      model: 'omni-moderation-latest',
-      input: trimmedUserText,
-    });
-
-    if (modResult.results[0]?.flagged) {
-      return new Response(
-        JSON.stringify({
-          relevant: false,
-          reason: 'moderation_flagged',
-          redirect: '',
-        }),
-        { status: 200, headers: jsonHeaders }
-      );
-    }
-  } catch (error) {
-    console.error('Moderation API error in relevance guard:', error);
-    return new Response(
-      JSON.stringify({
-        relevant: false,
-        reason: 'moderation_unavailable',
-        redirect: '',
-      }),
-      { status: 200, headers: jsonHeaders }
-    );
+  // 조사 주제의 구체적인 핵심어를 직접 묻는 질문은 AI 판정 없이 바로 허용한다.
+  // 확률적인 판정의 오판을 막고, 무료 사용량도 아낀다. 아이돌·게임처럼 명백한 이탈
+  // 신호가 함께 있는 질문은 이 규칙에서 제외되어 아래 AI 판정을 계속 거친다.
+  // 이어지는 /api/chat 요청은 공급자 안전 검사(Gemini safetySettings, OpenAI moderation)를 그대로 거친다.
+  if (isDirectTopicQuestion(trimmedTopic, trimmedUserText)) {
+    return relevanceResponse({ relevant: true, reason: 'direct_topic_keyword', redirect: '' });
   }
 
-  // 안전성 검사는 그대로 거친 뒤, 조사 주제의 구체적인 핵심어를 직접 묻는 질문은
-  // 확률적인 관련성 모델이 오판하지 않도록 즉시 허용한다. 아이돌·게임처럼 명백한
-  // 이탈 신호가 함께 있는 질문은 이 규칙에서 제외되어 아래 AI 판정을 계속 거친다.
-  if (isDirectTopicQuestion(trimmedTopic, trimmedUserText)) {
-    return new Response(
-      JSON.stringify({
-        relevant: true,
-        reason: 'direct_topic_keyword',
-        redirect: '',
-      }),
-      { status: 200, headers: jsonHeaders }
-    );
+  const provider = getAiProvider();
+  let apiKey = '';
+  try {
+    apiKey = resolveApiKey(req, provider);
+  } catch (error) {
+    const aiError = toAiError(error);
+    return relevanceResponse({ relevant: false, reason: aiError.code, redirect: '', ...aiErrorBody(aiError) }, aiError.status);
   }
 
   const recentConversation = Array.isArray(conversation)
@@ -88,8 +87,10 @@ export default async function handler(req) {
   const sourceExcerpt = trimmedSource.slice(0, MAX_SOURCE_CHARS);
 
   try {
-    const result = await openai.chat.completions.create({
-      model: MODEL,
+    const parsed = await provider.generateStructured({
+      apiKey,
+      schema: RELEVANCE_SCHEMA,
+      schemaName: 'relevance_result',
       messages: [
         {
           role: 'system',
@@ -115,47 +116,27 @@ export default async function handler(req) {
           ].join('\n\n'),
         },
       ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'relevance_result',
-          strict: true,
-          schema: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              relevant: { type: 'boolean' },
-              reason: { type: 'string' },
-              redirect: { type: 'string' },
-            },
-            required: ['relevant', 'reason', 'redirect'],
-          },
-        },
-      },
     });
 
-    const content = result.choices[0]?.message?.content || '{}';
-    const parsed = JSON.parse(content);
-
-    return new Response(
-      JSON.stringify({
-        relevant: parsed.relevant === true,
-        reason: typeof parsed.reason === 'string' ? parsed.reason : '',
-        redirect: typeof parsed.redirect === 'string' && parsed.redirect.trim()
-          ? parsed.redirect
-          : '',
-      }),
-      { status: 200, headers: jsonHeaders }
-    );
+    // 형식이 어긋난 응답도 학생에게 원문을 보여주지 않고, 정해진 필드만 골라 돌려준다.
+    return relevanceResponse({
+      relevant: parsed?.relevant === true,
+      reason: typeof parsed?.reason === 'string' ? parsed.reason : '',
+      redirect: typeof parsed?.redirect === 'string' && parsed.redirect.trim()
+        ? parsed.redirect
+        : '',
+    });
   } catch (error) {
-    console.error('Relevance guard error:', error);
-    return new Response(
-      JSON.stringify({
-        relevant: false,
-        reason: 'relevance_check_failed',
-        redirect: '',
-      }),
-      { status: 200, headers: jsonHeaders }
-    );
+    logAiError('relevance', error);
+    const aiError = toAiError(error);
+
+    // 공급자 안전 검사에 걸린 질문은 기존 moderation 차단과 같은 이유 코드로 알린다.
+    if (aiError.code === AI_ERROR_CODES.SAFETY_BLOCKED) {
+      return relevanceResponse({ relevant: false, reason: 'moderation_flagged', redirect: '' });
+    }
+    if (PASS_THROUGH_ERROR_CODES.has(aiError.code)) {
+      return relevanceResponse({ relevant: false, reason: aiError.code, redirect: '', ...aiErrorBody(aiError) }, aiError.status);
+    }
+    return relevanceResponse({ relevant: false, reason: 'relevance_check_failed', redirect: '' });
   }
 }

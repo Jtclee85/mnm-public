@@ -36,6 +36,8 @@ test.describe('뭐냐면 — 자료 조사 나침반 / 자료를 조사할 때 �
           localStorage: [
             { name: TUTORIAL_SEEN_KEY, value: 'true' },
             { name: APP_TUTORIAL_SEEN_KEY, value: 'true' },
+            // 나침반 동작만 검증하므로 Gemini 키 설정 창이 뜨지 않게 가짜 키를 둔다(외부 호출 없음).
+            { name: 'mnmGeminiApiKey', value: 'e2e-fake-gemini-key-not-real-0000' },
           ],
         }],
       },
@@ -258,6 +260,8 @@ test.describe('뭐냐면 — 자료 조사 나침반 / 자료를 조사할 때 �
           localStorage: [
             { name: TUTORIAL_SEEN_KEY, value: 'true' },
             { name: APP_TUTORIAL_SEEN_KEY, value: 'true' },
+            // 나침반 동작만 검증하므로 Gemini 키 설정 창이 뜨지 않게 가짜 키를 둔다(외부 호출 없음).
+            { name: 'mnmGeminiApiKey', value: 'e2e-fake-gemini-key-not-real-0000' },
           ],
         }],
       },

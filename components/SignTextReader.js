@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { compressImageFile, validateImageFile } from '../lib/imageCompress';
 import { getUiText } from '../lib/i18n';
+import { AI_KEY_ERROR_CODES } from '../lib/aiProviderConfig';
 
 const VALIDATION_ERROR_KEY = {
   NO_FILE: 'signReaderNoFile',
@@ -11,7 +12,17 @@ const VALIDATION_ERROR_KEY = {
 const DEMO_OCR_NOTICE =
   '오프라인 시연에서는 이미지 인식 기능이 작동하지 않습니다. 온라인 프로그램에서 안내판 사진을 올리면 원본자료를 추출할 수 있습니다.';
 
-export default function SignTextReader({ isMobile, onExtracted, t = getUiText('ko'), demoMode = false }) {
+// buildAiHeaders·ensureAiKey·onAiKeyError는 공개용 Gemini 모드의 사용자 키 처리용이다.
+// 넘기지 않으면(OpenAI 모드 등) 기존처럼 키 없이 요청한다.
+export default function SignTextReader({
+  isMobile,
+  onExtracted,
+  t = getUiText('ko'),
+  demoMode = false,
+  buildAiHeaders = (headers) => headers,
+  ensureAiKey = () => true,
+  onAiKeyError,
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -100,6 +111,13 @@ export default function SignTextReader({ isMobile, onExtracted, t = getUiText('k
       return;
     }
 
+    // 키가 없으면 사진을 보내지 않는다. 고른 사진은 그대로 두고 키 설정 창을 연다.
+    if (!ensureAiKey()) {
+      setStatus('error');
+      setErrorMessage(t.aiKey?.requiredNotice || t.signReaderFailure);
+      return;
+    }
+
     setStatus('extracting');
     setErrorMessage('');
 
@@ -108,14 +126,16 @@ export default function SignTextReader({ isMobile, onExtracted, t = getUiText('k
 
       const res = await fetch('/api/extract-sign-text', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ image: dataUrl }),
       });
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.text) {
+        const message = (data.code && t.aiKey?.errors?.[data.code]) || data.error || t.signReaderFailure;
+        if (AI_KEY_ERROR_CODES.has(data.code)) onAiKeyError?.(message);
         setStatus('error');
-        setErrorMessage(data.error || t.signReaderFailure);
+        setErrorMessage(message);
         setWarnings(Array.isArray(data.warnings) ? data.warnings : []);
         return;
       }

@@ -1,21 +1,37 @@
-# GPT 챗봇 (Simple Template)
+# 뭐냐면 (공개용)
+
+초등 사회과 조사학습·박물관 학습 자료를 학생 수준에 맞게 재구성하는 AI 코스웨어입니다.
+공개용은 생성형 AI 공급자로 **Google Gemini**(`gemini-3.5-flash`)를 기본 사용하고, 사용자가 자기 Gemini API 키를 입력합니다.
 
 ## 🚀 시작 방법
 
-1. `.env.local.example` 파일을 `.env.local`로 복사하고 OpenAI 키 입력
+1. `.env.local.example` 파일을 `.env.local`로 복사합니다. Gemini 모드(기본값)는 서버에 AI 키가 필요 없습니다.
 2. 로컬에서:
    ```
    npm install
    npm run dev
    ```
-3. 브라우저에서 `http://localhost:3000` 접속 → 챗봇 테스트
+3. 브라우저에서 `http://localhost:3000`에 접속합니다. 사용법 6과정을 본 뒤 키 설정 창에 [Google AI Studio](https://aistudio.google.com/apikey)에서 발급한 Gemini API 키를 넣습니다.
+
+## 🔑 Gemini API 키
+
+- 키는 사용자의 브라우저에만 저장됩니다. 기본은 `sessionStorage`(탭을 닫으면 삭제), '이 기기에 저장'을 고른 경우에만 `localStorage`입니다.
+- 서버 데이터베이스나 Vercel 환경변수에는 저장하지 않습니다. AI 요청마다 전용 헤더로만 보냅니다.
+- 공용 PC에서는 머리글의 **🔑 AI 키 설정 → 키 삭제**로 지웁니다.
+- 모델 선택 근거, 호출 기능 목록, 무료 할당량 오류, 롤백 방법, **Production 활성화 전 확인 사항(연령 요건 포함)** 은 [docs/GEMINI_OPERATIONS.md](docs/GEMINI_OPERATIONS.md)를 봅니다.
+
+## ↩️ OpenAI로 되돌리기
+
+`AI_PROVIDER=openai`와 `OPENAI_API_KEY`를 설정하고 다시 빌드합니다. 키 설정 창이 사라지고 서버 키로 기존 OpenAI 구현을 씁니다.
 
 ## ☁️ Vercel 배포
 
-1. 저장소를 Vercel에 연결
-2. 환경변수 `OPENAI_API_KEY` 등록
-   - 추천 영상 기능을 쓰려면 `YOUTUBE_API_KEY`도 등록
-3. Deploy → 생성된 URL로 접속하면 ✅ 바로 챗봇 사용 가능
+1. 공개용 Vercel 프로젝트(`mnm-public`)에 저장소를 연결합니다. 원본 프로젝트 `mnm`은 건드리지 않습니다.
+2. 환경변수
+   - `AI_PROVIDER`: 미설정 시 `gemini`. 롤백할 때만 `openai`
+   - `OPENAI_API_KEY`: OpenAI 모드에서만 필요
+   - `YOUTUBE_API_KEY`: 추천 영상 기능을 쓸 때
+3. Gemini 모드를 공개 사이트에서 켜기 전에 [운영 문서의 확인 항목](docs/GEMINI_OPERATIONS.md#production-활성화-전-확인)을 먼저 해결합니다.
 
 ## YouTube 추천 영상 기능
 

@@ -24,6 +24,10 @@ module.exports = defineConfig({
           localStorage: [
             { name: 'mnmHistoryResearchTutorialSeen', value: 'true' },
             { name: 'mnmAppUsageTutorialSeen', value: 'true' },
+            // Gemini 모드의 키 설정 창이 기존 테스트의 클릭을 가로채지 않도록 가짜 키를 넣는다.
+            // 실제 키가 아니며, AI 요청은 모두 page.route mock으로 처리해 외부로 나가지 않는다.
+            // 키 입력 흐름 자체는 tests/gemini-key-settings.spec.js에서 storageState를 비워 검증한다.
+            { name: 'mnmGeminiApiKey', value: 'e2e-fake-gemini-key-not-real-0000' },
           ],
         },
       ],

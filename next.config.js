@@ -5,13 +5,20 @@
 // - images.unoptimized    → export 모드에서 next/image 최적화 서버가 없으므로 필수.
 const isOfflineDemo = process.env.NEXT_PUBLIC_OFFLINE_DEMO_MODE === 'true';
 
+// AI 공급자(gemini | openai)는 화면과 Edge 서버가 같은 값을 봐야 하므로 빌드 시점에
+// 양쪽에 함께 주입한다. 공개용 기본값은 gemini다. lib/aiProviderConfig.js 참고.
+const env = {
+  AI_PROVIDER: process.env.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+};
+
 const nextConfig = isOfflineDemo
   ? {
+      env,
       output: 'export',
       trailingSlash: true,
       distDir: '.next-offline',
       images: { unoptimized: true },
     }
-  : {};
+  : { env };
 
 module.exports = nextConfig;

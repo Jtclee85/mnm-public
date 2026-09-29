@@ -170,6 +170,11 @@ test.describe('뭐냐면 — 6과정 앱 사용법 스포트라이트 튜토리�
     await page.getByRole('button', { name: '나중에 보기' }).click();
     await expect(page.getByTestId('app-usage-tutorial')).toHaveCount(0);
 
+    // Gemini 키가 없으면 사용법을 닫은 뒤 키 설정 창으로 이어진다. '나중에 설정'으로 닫는다.
+    await expect(page.getByTestId('ai-key-dialog')).toBeVisible();
+    await page.getByTestId('ai-key-later').click();
+    await expect(page.getByTestId('ai-key-dialog')).toHaveCount(0);
+
     await page.getByTestId('reopen-app-tutorial-button').click();
     await expect(page.getByTestId('app-tutorial-coach')).toBeVisible();
     await expect(page.getByText('과정 1 / 6')).toBeVisible();

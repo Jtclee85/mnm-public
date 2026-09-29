@@ -1,19 +1,36 @@
-import OpenAI from "openai";
+import { getAiProvider, resolveApiKey } from '../../lib/server/ai/provider';
+import { aiErrorBody, logAiError, toAiError } from '../../lib/server/ai/errors';
+import { ALLOWED_IMAGE_DATA_URL, MAX_IMAGE_BASE64_LENGTH } from '../../lib/server/ai/safety';
+import { AI_ERROR_CODES } from '../../lib/aiProviderConfig';
 
 export const config = {
   runtime: 'edge',
 };
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// 파일 형식·용량 제한은 lib/server/ai/safety.js에서 관리한다(형식: jpg·png·webp, base64 약 11MB).
+// 클라이언트는 1280px로 미리 압축해서 보내므로 보통 이보다 훨씬 작다.
 
-// Vision(이미지) 입력이 가능한 모델을 사용한다.
-const MODEL = "gpt-4o-mini";
+const SIGN_TEXT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    text: { type: 'string' },
+    warnings: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['text', 'warnings'],
+};
 
-const ALLOWED_DATA_URL_PREFIX = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
-
-// base64 문자열 길이 기준 상한 — 디코딩하면 약 8MB. 클라이언트는 1280px로 미리
-// 압축해서 보내므로 보통 이보다 훨씬 작고, 이 값은 변조된 클라이언트를 막는 안전장치다.
-const MAX_BASE64_LENGTH = 11_000_000;
+// 사용자가 이해할 수 있는 안내가 필요한 오류만 code 그대로 전달하고,
+// 나머지는 기존처럼 "글자를 읽지 못했다" 안내로 통일한다.
+const PASS_THROUGH_ERROR_CODES = new Set([
+  AI_ERROR_CODES.MISSING_KEY,
+  AI_ERROR_CODES.INVALID_KEY,
+  AI_ERROR_CODES.QUOTA_EXCEEDED,
+  AI_ERROR_CODES.RATE_LIMITED,
+  AI_ERROR_CODES.SAFETY_BLOCKED,
+  AI_ERROR_CODES.UNAVAILABLE,
+  AI_ERROR_CODES.NETWORK,
+]);
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -40,57 +57,35 @@ export default async function handler(req) {
 
   const image = typeof body?.image === 'string' ? body.image : '';
 
-  if (!image || !ALLOWED_DATA_URL_PREFIX.test(image)) {
+  if (!image || !ALLOWED_IMAGE_DATA_URL.test(image)) {
     return new Response(
       JSON.stringify({ error: 'jpg, png, webp 형식의 사진만 올릴 수 있어요.' }),
       { status: 400, headers: jsonHeaders }
     );
   }
 
-  if (image.length > MAX_BASE64_LENGTH) {
+  if (image.length > MAX_IMAGE_BASE64_LENGTH) {
     return new Response(
       JSON.stringify({ error: '사진 용량이 너무 커요. 더 작은 사진으로 다시 시도해 주세요.' }),
       { status: 400, headers: jsonHeaders }
     );
   }
 
-  // 이미지(개인정보 포함 가능성이 있는 원본 데이터)는 어떤 경우에도 로그에 남기지 않는다.
+  // 이미지(개인정보 포함 가능성이 있는 원본 데이터)와 키는 어떤 경우에도 로그에 남기지 않는다.
   try {
-    const result = await openai.chat.completions.create({
-      model: MODEL,
-      max_tokens: 2000,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: '이 사진 속 안내판 또는 전시해설 글자를 원문 그대로 추출해줘.' },
-            { type: 'image_url', image_url: { url: image, detail: 'high' } },
-          ],
-        },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'sign_text_result',
-          strict: true,
-          schema: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              text: { type: 'string' },
-              warnings: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['text', 'warnings'],
-          },
-        },
-      },
+    const provider = getAiProvider();
+    const apiKey = resolveApiKey(req, provider);
+    const parsed = await provider.analyzeImage({
+      apiKey,
+      image,
+      systemPrompt: SYSTEM_PROMPT,
+      prompt: '이 사진 속 안내판 또는 전시해설 글자를 원문 그대로 추출해줘.',
+      schema: SIGN_TEXT_SCHEMA,
+      schemaName: 'sign_text_result',
     });
 
-    const content = result.choices[0]?.message?.content || '{}';
-    const parsed = JSON.parse(content);
-    const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
-    const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.filter(w => typeof w === 'string' && w.trim()) : [];
+    const text = typeof parsed?.text === 'string' ? parsed.text.trim() : '';
+    const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings.filter(w => typeof w === 'string' && w.trim()) : [];
 
     if (!text) {
       return new Response(
@@ -104,14 +99,12 @@ export default async function handler(req) {
 
     return new Response(JSON.stringify({ text, warnings }), { status: 200, headers: jsonHeaders });
   } catch (error) {
-    // 오류 객체만 기록하고, 요청 본문(이미지 데이터)은 절대 로그에 남기지 않는다.
-    console.error('Sign text extraction error:', error?.message || error);
+    // 분류된 code만 기록하고, 요청 본문(이미지 데이터)은 절대 로그에 남기지 않는다.
+    logAiError('extract-sign-text', error);
+    const aiError = toAiError(error);
 
-    if (error?.status === 429) {
-      return new Response(
-        JSON.stringify({ error: '지금 너무 많이 사용 중이에요. 잠시 후 다시 시도해 주세요.' }),
-        { status: 429, headers: jsonHeaders }
-      );
+    if (PASS_THROUGH_ERROR_CODES.has(aiError.code)) {
+      return new Response(JSON.stringify(aiErrorBody(aiError)), { status: aiError.status, headers: jsonHeaders });
     }
 
     return new Response(

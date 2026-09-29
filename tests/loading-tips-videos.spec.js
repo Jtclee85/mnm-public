@@ -150,6 +150,9 @@ test.describe('뭐냐면 — 로딩 꿀팁 / 추천 영상', () => {
     // 처음 화면으로 돌아가 같은 주제를 다시 분석해도 빈 결과 캐시를 사용하므로
     // YouTube API 프록시를 또 호출하지 않아야 한다.
     await page.getByRole('button', { name: '처음으로' }).click();
+    // 같은 AI 요청은 성공 직후 3초 동안 다시 보내지 않는다(lib/aiRequestGuard.js, 무료 사용량 보호).
+    // 이 테스트는 추천 영상 캐시를 보려는 것이므로 그 시간이 지난 뒤 다시 분석한다.
+    await page.waitForTimeout(3100);
     await fillAndAnalyze(page);
     await expect(page.getByTestId('result-canvas')).toBeVisible();
     await page.waitForTimeout(300);

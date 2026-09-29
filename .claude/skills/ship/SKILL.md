@@ -19,7 +19,7 @@ description: 변경사항을 검증한 뒤 커밋·푸시한다. 사용자가 "�
    - `dist-submission/`, `.next*/`, `test-results/`
 2. CLAUDE.md "완료의 정의" 게이트를 실행한다:
    - 변경 영향을 받는 spec + `tests/smoke.spec.js`
-   - 공용 파일(`parseResponse.js`, `systemPrompt.js`, `i18n.js`, `chatApiShared.js`, `index.js` 레이아웃) 수정 시 `npm run test:e2e` 전체
+   - 공용 파일(`parseResponse.js`, `systemPrompt.js`, `i18n.js`, `lib/server/ai/*`, `chatApiShared.js`, `index.js` 레이아웃) 수정 시 `npm run test:e2e` 전체
    - 오프라인/제출 모드 영향 시 `tests/offline-demo.spec.js` 추가
 3. 테스트 실패 시: **커밋하지 않는다.** 원인을 보고하고 수정 후 재실행한다.
 4. diff에서 시도명/학교명/출품자명·API 키가 없는지 최종 확인한다.
