@@ -1,0 +1,29 @@
+node_modules/
+.env.local
+.next/
+.next-offline/
+out/
+*.log
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# 연구대회 USB 제출 패키지 산출물 — 레포에는 템플릿과 생성 스크립트만 둔다
+dist-submission/
+mnm_submission/
+submission-output/
+
+# 오프라인 데모용 실제 세션 스냅샷 — 사용자의 실제 작업 데이터라 레포에 올리지 않는다
+submission-demo/demo-snapshot.local.json
+
+# Claude Code 개인 로컬 설정 — 공유하지 않는다
+.claude/settings.local.json
+.DS_Store
+
+# 공개용 배포 연결과 비밀 환경변수는 저장소에 포함하지 않는다
+.vercel/
+.env*
+!.env.example
+!.env.local.example

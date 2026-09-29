@@ -1,0 +1,24 @@
+{
+  "name": "chatbot-clean",
+  "version": "1.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "youtube:channels": "node scripts/resolve-youtube-channel-ids.js",
+    "start": "next start",
+    "test:e2e": "playwright test",
+    "build:offline-demo": "NEXT_PUBLIC_OFFLINE_DEMO_MODE=true NEXT_PUBLIC_SUBMISSION_MODE=false next build",
+    "build:submission": "node scripts/build-submission-package.js"
+  },
+  "dependencies": {
+    "next": "14.1.0",
+    "openai": "^4.5.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-markdown": "^10.1.0",
+    "sharp": "^0.35.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

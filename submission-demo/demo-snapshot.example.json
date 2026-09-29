@@ -1,0 +1,91 @@
+{
+  "exportedAt": "2026-01-01T00:00:00.000Z",
+  "topic": "성덕대왕신종",
+  "session": {
+    "topic": "성덕대왕신종",
+    "sourceText": "성덕대왕신종은 신라 시대에 만들어진 우리나라에서 가장 큰 종이다. 높이 3.66미터, 무게는 약 18.9톤에 이른다. 신라 경덕왕이 아버지 성덕왕의 명복을 빌기 위해 만들기 시작하여 혜공왕 7년(771년)에 완성되었다. 종의 몸체에는 아름다운 비천상 무늬가 새겨져 있으며, 종소리가 맑고 여운이 길기로 유명하다. 국보로 지정되어 있다. (출처: 국가유산청·국립경주박물관 공개 설명 자료를 참고해 재구성한 예시)",
+    "gradeLevel": "standard",
+    "language": "ko",
+    "activeMode": "understand",
+    "conversation": [
+      { "role": "user", "content": "성덕대왕신종은 왜 만들었어?" },
+      { "role": "assistant", "content": "경덕왕이 돌아가신 아버지 성덕왕의 명복을 빌기 위해 만들기 시작했어. 아들 혜공왕 때인 771년에 완성되었지." },
+      { "role": "user", "content": "종소리가 왜 그렇게 유명해?" },
+      { "role": "assistant", "content": "종의 모양과 두께, 매다는 방법이 어우러져 소리가 맑고 여운이 아주 길게 울리기 때문이야. 그래서 지금도 많은 사람들이 그 소리의 비밀을 연구하고 있어." }
+    ],
+    "notes": {
+      "u_check1": "신라 시대에 만들어진 우리나라에서 가장 큰 종에 대한 설명이다.",
+      "u_check2": "비천상, 명복",
+      "u_check3": "종을 만드는 데 30년이 넘게 걸렸다는 점이 놀라웠다.",
+      "u_check4": "신라 사람들의 기술과 마음이 담긴 큰 종이라고 소개하고 싶다.",
+      "inq_selectedQuestion": "종소리가 맑고 길게 울리는 비밀은 무엇일까?",
+      "inq_selectedQuestionType": "원리 탐구",
+      "inq_firstThought": "종이 크니까 소리도 클 것 같다.",
+      "inq_reason": "큰 물건일수록 소리가 크게 나는 것을 본 적이 있어서.",
+      "inq_learnedAfterChat": "크기뿐 아니라 종의 모양과 두께, 매다는 방법까지 소리에 영향을 준다는 것을 알게 되었다.",
+      "inq_changedOrFurtherQuestion": "요즘 기술로 그 소리를 똑같이 만들 수 있을지 궁금하다.",
+      "pres_coreMessage": "성덕대왕신종에는 신라 사람들의 뛰어난 기술과 정성이 담겨 있다.",
+      "pres_point1": "우리나라에서 가장 큰 종이다.",
+      "pres_point2": "종소리가 맑고 여운이 길기로 유명하다.",
+      "pres_point3": "비천상 무늬가 아름답게 새겨져 있다.",
+      "pres_expectedQuestion": "종은 어떻게 쳤나요?",
+      "pres_preparedAnswer": "종 옆에 매달린 나무 막대(당목)로 쳐서 소리를 냈다.",
+      "pres_openingSentence": "여러분, 우리나라에서 가장 큰 종의 소리를 상상해 본 적 있나요?",
+      "pres_closingSentence": "천 년 넘게 이어져 온 소리처럼, 우리 문화유산을 오래 지켜 나가요.",
+      "write_topicSentence": "성덕대왕신종은 신라 사람들의 뛰어난 기술과 마음이 담긴 소중한 문화유산이다.",
+      "write_support1": "성덕대왕신종은 우리나라에서 가장 큰 종이다.",
+      "write_support2": "경덕왕이 아버지를 생각하며 만들기 시작했다.",
+      "write_support3": "종소리가 맑고 오래 울리는 것으로 유명하다.",
+      "write_evidence": "자료에는 종의 높이가 3.66m이고 무게가 약 18.9톤이라고 나와 있다.",
+      "write_closingThought": "신라 사람들이 이렇게 큰 종을 만든 것이 대단하고 오래 지켜야겠다고 생각했다.",
+      "write_openingSentence": "박물관에는 천 년이 넘도록 전해진 아주 큰 종이 있다.",
+      "write_closingSentence": "성덕대왕신종의 소리와 이야기가 앞으로도 오래 이어지면 좋겠다."
+    },
+    "analysisByMode": {
+      "understand": {
+        "understandingSentence": "성덕대왕신종은 신라 사람들이 왕의 명복을 빌며 만든 우리나라에서 가장 큰 종이다.",
+        "easy": "성덕대왕신종이 뭐냐면, 신라 사람들이 만든 우리나라에서 제일 큰 종이에요. 경덕왕이 돌아가신 아버지를 기리려고 만들기 시작했고, 771년에 완성되었어요. 종을 치면 소리가 아주 맑고 오래 울려서 유명해요.",
+        "understandingVocabulary": "- **명복**: 죽은 뒤에 받는 복. 돌아가신 분이 편안하기를 비는 마음.\n- **비천상**: 하늘을 나는 선녀의 모습을 새긴 그림이나 조각.\n- **국보**: 나라에서 정한 매우 소중한 보물.",
+        "understandingReading": "이 자료는 성덕대왕신종이 언제, 왜 만들어졌는지와 그 특징을 설명하고 있어요. 만든 까닭 → 크기 → 무늬 → 소리 순서로 읽으면 이해하기 쉬워요.",
+        "understandingChecklistLines": ["누가, 왜 만들기 시작했는지 찾았나요?", "언제 완성되었는지 확인했나요?", "종의 특징 두 가지를 말할 수 있나요?"],
+        "understandingMisconceptionLines": ["성덕왕이 직접 만든 것이 아니라, 아들 경덕왕이 아버지를 위해 만들기 시작했어요."],
+        "inquiryQuestions": "1. 신라 사람들은 이렇게 크고 무거운 종을 어떤 방법으로 만들었을까?\n2. 종에 비천상 무늬를 새긴 까닭은 무엇일까?\n3. 성덕대왕신종의 소리가 유난히 맑고 길게 울리는 비밀은 무엇일까?"
+      },
+      "inquiry": {
+        "inquiryQuestions": "1. 신라 사람들은 이렇게 크고 무거운 종을 어떤 방법으로 만들었을까?\n2. 종에 비천상 무늬를 새긴 까닭은 무엇일까?\n3. 성덕대왕신종의 소리가 유난히 맑고 길게 울리는 비밀은 무엇일까?"
+      },
+      "presentation": {
+        "presentationMessages": "성덕대왕신종에 담긴 신라 사람들의 기술과 마음을 전하자.",
+        "presentationFlow": "종 소개 → 만든 까닭 → 종소리의 비밀 → 느낀 점",
+        "presentationEvidenceLines": ["높이 3.66m, 무게 약 18.9톤", "771년 완성", "비천상 무늬"],
+        "presentationQuestions": "종은 지금도 칠 수 있나요? / 왜 그렇게 오래 걸려 만들었나요?",
+        "presentationVisualPlan": "종 전체 사진 1장, 비천상 무늬 확대 그림 1장",
+        "presentationTemplateLines": ["제가 소개할 문화유산은 ___입니다.", "가장 놀라운 점은 ___입니다."],
+        "presentationChecklistLines": ["핵심 메시지를 한 문장으로 말했나요?", "근거를 두 가지 이상 들었나요?"]
+      },
+      "writing": {
+        "writingTopicSentences": "1. 성덕대왕신종은 신라의 뛰어난 기술을 보여 주는 문화유산이다.\n2. 성덕대왕신종에는 가족을 생각하는 마음이 담겨 있다.\n3. 성덕대왕신종의 소리는 천 년을 이어 온 우리의 자랑이다.",
+        "writingSupportDirections": "크기와 무게 같은 숫자 근거, 만든 까닭 이야기, 종소리의 특징을 뒷받침 내용으로 쓸 수 있어요.",
+        "writingEvidenceLines": ["높이 3.66m, 무게 약 18.9톤", "경덕왕이 아버지를 위해 제작 시작", "맑고 긴 여운의 종소리"],
+        "writingTemplateLines": ["나는 ___을 보고 ___라고 생각했다.", "그 까닭은 ___ 때문이다."],
+        "writingChecklistLines": ["중심 문장이 분명한가요?", "근거가 자료에서 나왔나요?"],
+        "writingOutline": "처음: 박물관에서 본 큰 종에 대한 궁금증\n가운데: 성덕대왕신종을 만든 까닭과 만드는 과정\n끝: 문화유산을 아끼고 지켜야겠다는 다짐"
+      }
+    },
+    "toolResults": {},
+    "recommendedVideos": [
+      {
+        "videoId": "",
+        "title": "성덕대왕신종 관련 승인 채널 영상 (예시 — 교사가 승인한 videoId로 교체)",
+        "channelTitle": "국가유산채널(K-Heritage Channel)",
+        "approvedChannelName": "국가유산채널(K-Heritage Channel)",
+        "approvedChannelId": "UCRO-l6Fli7rtpY2O9Y5NIzw",
+        "url": "https://www.youtube.com/results?search_query=성덕대왕신종+국가유산채널",
+        "source": "YouTube",
+        "usageType": "external-reference-link"
+      }
+    ],
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "notes": {}
+}

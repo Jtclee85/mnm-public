@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{APP_NAME}} — 오프라인 시연</title>
+  <style>
+    /* 오프라인 시연 — 실제 앱에서 작성한 세션 스냅샷(demo-data.js)을 정적으로 렌더링한다.
+       AI API 호출·스트리밍 없이, file:// 환경에서 바로 열려야 한다. */
+    :root {
+      --color-primary: #1A3FA8;
+      --color-primary-dark: #184884;
+      --color-accent-teal: #00A8B8;
+      --color-gold: #F8C84E;
+      --color-coral: #F47B6E;
+      --color-bg: #F7F3E9;
+      --color-surface: #FFFFFF;
+      --color-surface-alt: #FBF8F0;
+      --color-text: #1F2A44;
+      --color-text-sub: #5A6478;
+      --color-border: #E3DECF;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+      background: var(--color-bg); color: var(--color-text);
+      line-height: 1.7; padding: 20px 16px 120px;
+    }
+    .container { max-width: 1480px; margin: 0 auto; }
+
+    /* ── 상단 헤더 ── */
+    header.top {
+      text-align: center; background: var(--color-surface);
+      border: 1px solid var(--color-border); border-radius: 20px;
+      padding: 26px 24px; margin-bottom: 18px;
+    }
+    header.top .label { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: var(--color-text-sub); }
+    header.top h1 { font-size: 34px; font-weight: 900; color: var(--color-primary-dark); margin: 2px 0 8px; }
+    header.top .meta { font-size: 13px; color: var(--color-text-sub); }
+    header.top .meta strong { color: var(--color-text); }
+    .badge-teal {
+      display: inline-block; margin: 12px 4px 0; padding: 6px 14px; border-radius: 20px;
+      background: rgba(0, 168, 184, 0.14); color: #00707c; font-size: 12px; font-weight: 800;
+    }
+    .badge-coral {
+      display: inline-block; margin: 12px 4px 0; padding: 6px 14px; border-radius: 20px;
+      background: rgba(244, 123, 110, 0.16); color: #b0402f; font-size: 12px; font-weight: 800;
+    }
+
+    /* ── 3컬럼 레이아웃 ── */
+    .layout { display: grid; grid-template-columns: 1fr 0.9fr 1.25fr; gap: 16px; align-items: start; }
+
+    .card {
+      background: var(--color-surface); border: 1px solid var(--color-border);
+      border-radius: 18px; padding: 20px 22px; margin-bottom: 16px;
+    }
+    .card > h2 {
+      font-size: 15px; font-weight: 900; color: var(--color-primary-dark);
+      margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--color-border);
+    }
+
+    /* ── 탭 (좌측 패널 / 우측 모드 탭 공용) ── */
+    .tabs {
+      display: grid; gap: 4px; background: var(--color-bg);
+      border: 1px solid var(--color-border); border-radius: 12px; padding: 4px; margin-bottom: 14px;
+    }
+    .tabs.cols-2 { grid-template-columns: 1fr 1fr; }
+    .tabs.cols-4 { grid-template-columns: repeat(4, 1fr); }
+    .tabs button {
+      border: none; background: transparent; color: var(--color-text-sub);
+      border-radius: 8px; padding: 9px 8px; cursor: pointer;
+      font-weight: 800; font-size: 12px; font-family: inherit;
+    }
+    .tabs button.active {
+      background: var(--color-surface); color: var(--color-primary-dark);
+      box-shadow: 0 1px 4px rgba(31, 42, 68, 0.10);
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── 본문 공통 구성요소 ── */
+    .field-label { font-size: 12px; font-weight: 800; color: var(--color-primary); margin: 14px 0 4px; }
+    .field-label:first-child { margin-top: 0; }
+    .readonly-box {
+      background: var(--color-surface-alt); border: 1px solid var(--color-border);
+      border-radius: 12px; padding: 12px 14px; font-size: 13px; white-space: pre-wrap; word-break: break-word;
+    }
+    .readonly-box.empty { color: var(--color-text-sub); font-style: italic; }
+    .gold-box {
+      background: rgba(248, 200, 78, 0.18); border: 1px solid rgba(248, 200, 78, 0.7);
+      border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700;
+    }
+    .prose { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+    .prose ul { padding-left: 20px; white-space: normal; }
+    .prose li { margin-bottom: 4px; white-space: pre-wrap; }
+    .prose strong { color: var(--color-primary-dark); }
+    details.vocab {
+      margin-top: 8px; background: var(--color-surface-alt);
+      border: 1px solid var(--color-border); border-radius: 12px; padding: 10px 14px;
+    }
+    details.vocab summary { cursor: pointer; font-size: 13px; font-weight: 800; color: var(--color-primary-dark); }
+    details.vocab .prose { margin-top: 8px; }
+
+    .status-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+    .chip {
+      display: inline-block; padding: 4px 12px; border-radius: 16px; font-size: 11px; font-weight: 800;
+    }
+    .chip.done { background: rgba(0, 168, 184, 0.14); color: #00707c; }
+    .chip.mode { background: rgba(26, 63, 168, 0.10); color: var(--color-primary-dark); }
+    .topic-title { font-size: 20px; font-weight: 900; color: var(--color-primary-dark); }
+    .source-preview {
+      margin-top: 10px; font-size: 12px; color: var(--color-text-sub);
+      background: var(--color-surface-alt); border: 1px solid var(--color-border);
+      border-radius: 12px; padding: 10px 12px;
+      display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .session-note { margin-top: 12px; font-size: 12px; color: var(--color-text-sub); }
+
+    /* ── 자료 조사 나침반 ── */
+    .compass-item { display: flex; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+    .compass-item .emoji { flex-shrink: 0; }
+    .compass-flow {
+      margin-top: 12px; text-align: center; font-size: 12px; font-weight: 800;
+      background: rgba(26, 63, 168, 0.08); border-radius: 12px; padding: 10px;
+      color: var(--color-primary-dark);
+    }
+
+    /* ── AI 발판 / 워크시트 구분 ── */
+    .section-sub {
+      font-size: 13px; font-weight: 900; color: var(--color-text);
+      margin: 18px 0 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .section-sub:first-child { margin-top: 0; }
+    .section-sub .tag {
+      font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px;
+    }
+    .tag.ai { background: rgba(26, 63, 168, 0.10); color: var(--color-primary-dark); }
+    .tag.student { background: rgba(248, 200, 78, 0.35); color: #7a5b00; }
+
+    /* ── 학습 산출물 미리보기 ── */
+    .output-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .output-card {
+      background: var(--color-surface-alt); border: 1px solid var(--color-border);
+      border-radius: 14px; padding: 16px 18px;
+    }
+    .output-card h3 { font-size: 13px; font-weight: 900; color: var(--color-primary); margin-bottom: 8px; }
+    .output-card .field-label { font-size: 11px; margin-top: 10px; }
+    .output-card .readonly-box { font-size: 12px; padding: 8px 10px; }
+
+    /* ── 챗봇 ── */
+    #chatbot-btn {
+      position: fixed; right: 20px; bottom: 20px; z-index: 950;
+      width: 72px; height: 72px; border-radius: 50%; border: 3px solid var(--color-primary);
+      background: var(--color-surface); cursor: pointer; overflow: hidden;
+      box-shadow: 0 10px 24px rgba(26, 63, 168, 0.25);
+      display: flex; align-items: center; justify-content: center; font-size: 30px;
+    }
+    #chatbot-btn img { width: 100%; height: 100%; object-fit: cover; }
+    #chatbot-popup {
+      position: fixed; right: 20px; bottom: 104px; z-index: 951;
+      width: min(400px, calc(100vw - 40px)); max-height: min(560px, calc(100vh - 140px));
+      background: var(--color-surface); border: 1px solid var(--color-border);
+      border-radius: 18px; box-shadow: 0 18px 48px rgba(31, 42, 68, 0.25);
+      display: none; flex-direction: column; overflow: hidden;
+    }
+    #chatbot-popup.open { display: flex; }
+    #chatbot-popup .chat-header {
+      background: var(--color-primary); color: var(--color-surface);
+      padding: 12px 16px; font-size: 13px; font-weight: 800;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #chatbot-popup .chat-header button {
+      border: none; background: transparent; color: var(--color-surface);
+      font-size: 18px; cursor: pointer; line-height: 1;
+    }
+    #chat-messages { padding: 14px; overflow-y: auto; flex: 1; }
+    .bubble { max-width: 85%; border-radius: 14px; padding: 9px 13px; font-size: 13px; margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
+    .bubble.assistant { background: var(--color-surface-alt); border: 1px solid var(--color-border); margin-right: auto; }
+    .bubble.user { background: var(--color-primary); color: var(--color-surface); margin-left: auto; }
+    .bubble.note {
+      max-width: 100%; text-align: center; background: rgba(244, 123, 110, 0.12);
+      border: 1px dashed rgba(244, 123, 110, 0.6); color: #8a3a2c; font-size: 12px;
+    }
+    .chat-input-disabled {
+      border-top: 1px solid var(--color-border); background: var(--color-surface-alt);
+      padding: 12px 14px; font-size: 12px; color: var(--color-text-sub); text-align: center;
+    }
+
+    .demo-error {
+      max-width: 620px; margin: 60px auto; text-align: center;
+      background: var(--color-surface); border: 1px solid var(--color-border);
+      border-radius: 18px; padding: 40px 30px; font-size: 14px;
+    }
+
+    .back-link {
+      display: inline-block; margin-top: 4px; text-decoration: none;
+      font-size: 13px; font-weight: 800; color: var(--color-primary-dark);
+      border: 2px solid var(--color-primary); border-radius: 12px;
+      background: rgba(26, 63, 168, 0.08); padding: 10px 20px;
+    }
+
+    /* ── 반응형: 모바일 단일 컬럼 ── */
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr 1fr; }
+      .col-right { grid-column: 1 / -1; }
+      .output-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 680px) {
+      .layout { grid-template-columns: 1fr; }
+      .col-right { grid-column: auto; }
+      .output-grid { grid-template-columns: 1fr; }
+      header.top h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="top">
+      <p class="label">프로그램명</p>
+      <h1>{{APP_NAME}}</h1>
+      <p class="meta"><strong>연구보고서 제목</strong> · {{REPORT_TITLE}}</p>
+      <p class="meta"><strong>대상학년</strong> · {{TARGET_GRADE}}</p>
+      <div>
+        <span class="badge-teal">오프라인 시연 — 실제 AI 호출 없이 저장된 세션을 그대로 보여줍니다</span>
+        <span class="badge-coral" id="fallback-badge" style="display:none;">스냅샷 파일이 없어 기본 예시 데이터로 표시됩니다.</span>
+      </div>
+    </header>
+
+    <div id="demo-root"></div>
+
+    <p style="text-align:center; margin-top: 8px;"><a class="back-link" href="../index.html">← 시작 화면으로 돌아가기</a></p>
+  </div>
+
+  <!-- 챗봇 (우하단) -->
+  <button id="chatbot-btn" type="button" aria-label="AI 도우미 대화 보기" style="display:none;">💬</button>
+  <div id="chatbot-popup" role="dialog" aria-label="AI 도우미 대화 (박제)">
+    <div class="chat-header">
+      <span>AI 도우미와의 대화 (실제 기록)</span>
+      <button type="button" id="chatbot-close" aria-label="닫기">×</button>
+    </div>
+    <div id="chat-messages"></div>
+    <div class="chat-input-disabled">
+      오프라인 시연에서는 새 질문 전송이 제공되지 않습니다.<br />온라인 프로그램에서 AI 도우미와 대화할 수 있습니다.
+    </div>
+  </div>
+
+  <!-- 빌드 스크립트가 스냅샷을 정규화해 생성하는 파일 (file:// 환경에서 fetch 대신 script 로딩) -->
+  <script src="./demo-data.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      var S = window.MNM_DEMO_SNAPSHOT;
+      var root = document.getElementById('demo-root');
+
+      if (!S) {
+        root.innerHTML =
+          '<div class="demo-error"><strong>시연 데이터를 불러올 수 없습니다.</strong><br /><br />' +
+          'demo-data.js 파일이 이 폴더에 함께 있어야 합니다.<br />' +
+          'npm run build:submission 으로 생성된 dist-submission 폴더 전체를 복사했는지 확인해 주세요.</div>';
+        return;
+      }
+
+      var session = S.session || S;
+      var topic = S.topic || session.topic || '';
+      var sourceText = session.sourceText || '';
+      var notes = session.notes || S.notes || {};
+      var byMode = session.analysisByMode || {};
+      var VALID_MODES = ['understand', 'inquiry', 'presentation', 'writing'];
+      var activeMode = VALID_MODES.indexOf(session.activeMode) >= 0 ? session.activeMode : 'presentation';
+      var conversation = session.conversation || [];
+      var understand = byMode.understand || byMode[activeMode] || {};
+      var inquiry = byMode.inquiry || {};
+      var presentation = byMode.presentation || {};
+      var writing = byMode.writing || {};
+
+      if (S.isFallback) document.getElementById('fallback-badge').style.display = 'inline-block';
+
+      // ── 렌더링 헬퍼 ──
+      function esc(str) {
+        return String(str == null ? '' : str)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+      // 간단한 markdown 유사 렌더링: ###제목/굵게/목록/줄바꿈만 살린다.
+      function prose(text) {
+        if (!text || !String(text).trim()) return '';
+        var lines = String(text).split('\n');
+        var html = '';
+        var listBuf = [];
+        function flushList() {
+          if (listBuf.length) { html += '<ul>' + listBuf.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul>'; listBuf = []; }
+        }
+        lines.forEach(function (line) {
+          var t = esc(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+          var m = t.match(/^\s*[-*•]\s+(.*)$/);
+          var h = t.match(/^\s*#{1,4}\s+(.*)$/);
+          if (m) { listBuf.push(m[1]); return; }
+          flushList();
+          if (h) { html += '<div style="font-weight:900; color:var(--color-primary-dark); margin:8px 0 4px;">' + h[1] + '</div>'; return; }
+          html += t + '\n';
+        });
+        flushList();
+        return '<div class="prose">' + html.replace(/\n$/, '') + '</div>';
+      }
+      function proseBlock(label, text) {
+        if (!text || !String(text).trim()) return '';
+        return '<p class="field-label">' + esc(label) + '</p>' + prose(text);
+      }
+      function linesBlock(label, arr) {
+        if (!Array.isArray(arr) || arr.length === 0) return '';
+        return proseBlock(label, arr.map(function (l) { return '- ' + l; }).join('\n'));
+      }
+      // 워크시트 입력칸 — 값이 채워진 읽기 전용 박스, 비어 있으면 "아직 작성 전"
+      function worksheetField(label, value) {
+        var filled = value && String(value).trim();
+        return '<p class="field-label">' + esc(label) + '</p>' +
+          (filled
+            ? '<div class="readonly-box">' + esc(value) + '</div>'
+            : '<div class="readonly-box empty">아직 작성 전</div>');
+      }
+      function hasText(v) { return !!(v && String(v).trim()); }
+
+      // ── 왼쪽 패널: 조사 원본자료 / 쉬운설명 ──
+      var vocab = understand.understandingVocabulary ||
+        (Array.isArray(understand.vocabularyLines) ? understand.vocabularyLines.map(function (l) { return '- ' + l; }).join('\n') : '');
+
+      var leftPanel =
+        '<div class="card">' +
+          '<h2>참고 자료</h2>' +
+          '<div class="tabs cols-2" id="left-tabs">' +
+            '<button data-pane="pane-source" class="active">조사 원본자료</button>' +
+            '<button data-pane="pane-easy">쉬운설명</button>' +
+          '</div>' +
+          '<div class="tab-pane active" id="pane-source">' +
+            '<p class="field-label">조사 주제</p>' +
+            '<div class="readonly-box">' + esc(topic) + '</div>' +
+            '<div class="status-row"><span class="chip done">자료 상태: 입력 완료</span></div>' +
+            '<p class="field-label">조사 원본자료</p>' +
+            (hasText(sourceText) ? '<div class="readonly-box">' + esc(sourceText) + '</div>' : '<div class="readonly-box empty">아직 작성 전</div>') +
+          '</div>' +
+          '<div class="tab-pane" id="pane-easy">' +
+            (hasText(understand.understandingSentence)
+              ? '<p class="field-label">한 문장으로 이해하기</p><div class="gold-box">' + esc(understand.understandingSentence) + '</div>'
+              : '') +
+            proseBlock('조사자료를 쉬운 말로 바꾸면', understand.easy) +
+            (hasText(vocab)
+              ? '<details class="vocab"><summary>어려운 낱말 클릭해서 보기</summary>' + prose(vocab) + '</details>'
+              : '') +
+          '</div>' +
+        '</div>';
+
+      // ── 가운데: 조사 주제 카드 + 자료 조사 나침반 ──
+      var modeLabels = { understand: '이해', inquiry: '탐구', presentation: '발표준비', writing: '글쓰기준비' };
+      var centerPanel =
+        '<div class="card">' +
+          '<h2>조사 학습 상태</h2>' +
+          '<div class="topic-title">' + esc(topic) + '</div>' +
+          '<div class="status-row">' +
+            '<span class="chip done">분석 완료</span>' +
+            '<span class="chip mode">활성 모드: ' + modeLabels[activeMode] + '</span>' +
+          '</div>' +
+          (hasText(sourceText) ? '<div class="source-preview">' + esc(sourceText.slice(0, 220)) + (sourceText.length > 220 ? '…' : '') + '</div>' : '') +
+          '<p class="session-note">' + (S.isFallback
+            ? '스냅샷 파일이 없어 기본 예시 데이터로 표시됩니다.'
+            : '이 오프라인 시연은 실제 작성된 세션을 바탕으로 구성되었습니다.') + '</p>' +
+        '</div>' +
+        '<div class="card">' +
+          '<h2>🧭 자료 조사 나침반</h2>' +
+          '<div class="compass-item"><span class="emoji">🏛️</span><span><strong>출처:</strong> 어디에서 가져온 자료인가요?</span></div>' +
+          '<div class="compass-item"><span class="emoji">👤</span><span><strong>만든 사람:</strong> 누가 만든 자료인가요?</span></div>' +
+          '<div class="compass-item"><span class="emoji">🕒</span><span><strong>날짜:</strong> 언제 만들어졌거나 고쳐졌나요?</span></div>' +
+          '<div class="compass-item"><span class="emoji">🔎</span><span><strong>핵심 낱말:</strong> 자료 속 중요한 말은 무엇인가요?</span></div>' +
+          '<div class="compass-item"><span class="emoji">🧩</span><span><strong>근거:</strong> 내 생각을 뒷받침할 근거가 있나요?</span></div>' +
+          '<div class="compass-flow">자료 찾기 → 출처 확인 → 핵심 낱말 → 근거 쓰기</div>' +
+        '</div>';
+
+      // ── 오른쪽: 모드 탭 ──
+      var understandPane =
+        '<div class="section-sub"><span class="tag ai">AI 발판</span>자료 읽기 도움</div>' +
+        proseBlock('자료 읽기', understand.understandingReading) +
+        linesBlock('이해 점검 목록', understand.understandingChecklistLines) +
+        linesBlock('헷갈리기 쉬운 점', understand.understandingMisconceptionLines) +
+        '<div class="section-sub"><span class="tag student">학생 작성</span>이해 확인 워크시트</div>' +
+        worksheetField('Q1. 이 자료는 무엇에 대한 설명인가요?', notes.u_check1) +
+        worksheetField('Q2. 기억에 남는 낱말은 무엇인가요?', notes.u_check2) +
+        worksheetField('Q3. 새롭게 알게 된 점은 무엇인가요?', notes.u_check3) +
+        worksheetField('Q4. 친구에게 설명한다면 어떻게 말하고 싶나요?', notes.u_check4);
+
+      var inquiryQuestionsText = hasText(inquiry.inquiryQuestions) ? inquiry.inquiryQuestions : understand.inquiryQuestions;
+      var inquiryPane =
+        '<div class="section-sub"><span class="tag ai">AI 발판</span>추천 탐구 질문</div>' +
+        (hasText(inquiryQuestionsText) ? prose(inquiryQuestionsText) : '<div class="readonly-box empty">추천 질문 없음</div>') +
+        '<div class="section-sub"><span class="tag student">학생 작성</span>탐구 정리 워크시트</div>' +
+        worksheetField('선택한 질문' + (hasText(notes.inq_selectedQuestionType) ? ' (' + esc(notes.inq_selectedQuestionType) + ')' : ''), notes.inq_selectedQuestion) +
+        worksheetField('내 처음 생각', notes.inq_firstThought) +
+        worksheetField('왜 그렇게 생각했나요?', notes.inq_reason) +
+        worksheetField('챗봇과 대화 후 새롭게 알게 된 점', notes.inq_learnedAfterChat) +
+        worksheetField('생각이 바뀐 점 또는 더 궁금한 점', notes.inq_changedOrFurtherQuestion);
+
+      var presentationPane =
+        '<div class="section-sub"><span class="tag ai">AI 발판</span>발표 준비 도움</div>' +
+        proseBlock('전하고 싶은 메시지', presentation.presentationMessages) +
+        proseBlock('발표 흐름', presentation.presentationFlow) +
+        linesBlock('근거 재료', presentation.presentationEvidenceLines) +
+        proseBlock('예상 질문', presentation.presentationQuestions) +
+        proseBlock('시각 자료 계획', presentation.presentationVisualPlan) +
+        linesBlock('문장틀', presentation.presentationTemplateLines) +
+        linesBlock('자기 점검 체크리스트', presentation.presentationChecklistLines) +
+        '<div class="section-sub"><span class="tag student">학생 작성</span>발표 준비 워크시트</div>' +
+        worksheetField('내 발표의 핵심 메시지', notes.pres_coreMessage) +
+        worksheetField('친구들에게 꼭 알려주고 싶은 내용 1', notes.pres_point1) +
+        worksheetField('친구들에게 꼭 알려주고 싶은 내용 2', notes.pres_point2) +
+        worksheetField('친구들에게 꼭 알려주고 싶은 내용 3', notes.pres_point3) +
+        worksheetField('친구들이 궁금해할 질문', notes.pres_expectedQuestion) +
+        worksheetField('내가 준비할 답', notes.pres_preparedAnswer) +
+        worksheetField('발표 첫 문장', notes.pres_openingSentence) +
+        worksheetField('발표 마무리 문장', notes.pres_closingSentence);
+
+      var writingPane =
+        '<div class="section-sub"><span class="tag ai">AI 발판</span>글쓰기 준비 도움</div>' +
+        proseBlock('중심문장 후보', writing.writingTopicSentences) +
+        proseBlock('뒷받침 방향', writing.writingSupportDirections) +
+        linesBlock('근거 재료', writing.writingEvidenceLines) +
+        linesBlock('문장틀', writing.writingTemplateLines) +
+        linesBlock('자기 점검 체크리스트', writing.writingChecklistLines) +
+        proseBlock('글쓰기 개요', writing.writingOutline) +
+        '<div class="section-sub"><span class="tag student">학생 작성</span>글쓰기 준비 워크시트</div>' +
+        worksheetField('중심 문장', notes.write_topicSentence) +
+        worksheetField('뒷받침 내용 1', notes.write_support1) +
+        worksheetField('뒷받침 내용 2', notes.write_support2) +
+        worksheetField('뒷받침 내용 3', notes.write_support3) +
+        worksheetField('근거', notes.write_evidence) +
+        worksheetField('마무리 생각', notes.write_closingThought) +
+        worksheetField('첫 문장', notes.write_openingSentence) +
+        worksheetField('마무리 문장', notes.write_closingSentence);
+
+      var rightPanel =
+        '<div class="card">' +
+          '<h2>학습 활동 (실제 작성 상태)</h2>' +
+          '<div class="tabs cols-4" id="mode-tabs">' +
+            '<button data-pane="pane-understand"' + (activeMode === 'understand' ? ' class="active"' : '') + '>이해</button>' +
+            '<button data-pane="pane-inquiry"' + (activeMode === 'inquiry' ? ' class="active"' : '') + '>탐구</button>' +
+            '<button data-pane="pane-presentation"' + (activeMode === 'presentation' ? ' class="active"' : '') + '>발표준비</button>' +
+            '<button data-pane="pane-writing"' + (activeMode === 'writing' ? ' class="active"' : '') + '>글쓰기준비</button>' +
+          '</div>' +
+          '<div class="tab-pane' + (activeMode === 'understand' ? ' active' : '') + '" id="pane-understand">' + understandPane + '</div>' +
+          '<div class="tab-pane' + (activeMode === 'inquiry' ? ' active' : '') + '" id="pane-inquiry">' + inquiryPane + '</div>' +
+          '<div class="tab-pane' + (activeMode === 'presentation' ? ' active' : '') + '" id="pane-presentation">' + presentationPane + '</div>' +
+          '<div class="tab-pane' + (activeMode === 'writing' ? ' active' : '') + '" id="pane-writing">' + writingPane + '</div>' +
+        '</div>';
+
+      // ── 하단: 학습 산출물 미리보기 (공유 페이지와 유사) ──
+      function outputCard(title, fields) {
+        var body = fields.map(function (f) { return worksheetField(f[0], f[1]); }).join('');
+        return '<div class="output-card"><h3>' + title + '</h3>' + body + '</div>';
+      }
+      var writingOutputBody = (hasText(notes.write_topicSentence) || hasText(notes.write_openingSentence))
+        ? [['중심 문장', notes.write_topicSentence], ['첫 문장', notes.write_openingSentence], ['마무리 문장', notes.write_closingSentence]]
+        : null;
+      var outputsSection =
+        '<div class="card">' +
+          '<h2>학습 산출물 미리보기</h2>' +
+          '<div class="output-grid">' +
+          outputCard('✅ 이해 확인', [
+            ['무엇에 대한 자료인가요?', notes.u_check1],
+            ['새롭게 알게 된 점', notes.u_check3],
+          ]) +
+          outputCard('🔎 탐구 정리', [
+            ['선택한 질문', notes.inq_selectedQuestion],
+            ['대화 후 알게 된 점', notes.inq_learnedAfterChat],
+          ]) +
+          outputCard('🎤 발표 준비', [
+            ['핵심 메시지', notes.pres_coreMessage],
+            ['발표 첫 문장', notes.pres_openingSentence],
+            ['발표 마무리 문장', notes.pres_closingSentence],
+          ]) +
+          (writingOutputBody
+            ? outputCard('✏️ 글쓰기 개요', writingOutputBody)
+            : '<div class="output-card"><h3>✏️ 글쓰기 개요</h3><p class="field-label">아직 작성 전 — AI 발판 자료</p>' +
+              (hasText(writing.writingOutline) ? prose(String(writing.writingOutline).slice(0, 400)) : '<div class="readonly-box empty">아직 작성 전</div>') +
+              '</div>') +
+          '</div>' +
+        '</div>';
+
+      root.innerHTML =
+        '<div class="layout">' +
+          '<div class="col-left">' + leftPanel + '</div>' +
+          '<div class="col-center">' + centerPanel + '</div>' +
+          '<div class="col-right">' + rightPanel + '</div>' +
+        '</div>' +
+        outputsSection;
+
+      // ── 탭 전환 ──
+      function bindTabs(containerId) {
+        var box = document.getElementById(containerId);
+        if (!box) return;
+        var buttons = box.querySelectorAll('button');
+        buttons.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            buttons.forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            var parent = box.parentElement;
+            parent.querySelectorAll(':scope > .tab-pane').forEach(function (p) { p.classList.remove('active'); });
+            var pane = document.getElementById(btn.getAttribute('data-pane'));
+            if (pane) pane.classList.add('active');
+          });
+        });
+      }
+      bindTabs('left-tabs');
+      bindTabs('mode-tabs');
+
+      // ── 챗봇 (박제 대화) ──
+      var chatBtn = document.getElementById('chatbot-btn');
+      var popup = document.getElementById('chatbot-popup');
+      var messagesBox = document.getElementById('chat-messages');
+
+      chatBtn.style.display = 'flex';
+      // 마스코트 이미지 — 빌드 시 dist-submission/assets/에 복사됨. 없으면 💬 이모지 유지.
+      var mascot = new Image();
+      mascot.alt = 'AI 도우미';
+      mascot.onload = function () { chatBtn.textContent = ''; chatBtn.appendChild(mascot); };
+      mascot.src = '../assets/chatbot-mascot.png';
+
+      var chatHtml = '';
+      (Array.isArray(conversation) ? conversation : []).forEach(function (msg) {
+        if (!msg || !hasText(msg.content)) return;
+        if (msg.role === 'system-note') {
+          chatHtml += '<div class="bubble note">' + esc(msg.content) + '</div>';
+        } else if (msg.role === 'user' || msg.role === 'assistant') {
+          chatHtml += '<div class="bubble ' + msg.role + '">' + esc(msg.content) + '</div>';
+        }
+      });
+      messagesBox.innerHTML = chatHtml || '<div class="bubble assistant">이 세션에는 저장된 대화가 없습니다.</div>';
+
+      chatBtn.addEventListener('click', function () { popup.classList.toggle('open'); });
+      document.getElementById('chatbot-close').addEventListener('click', function () { popup.classList.remove('open'); });
+    })();
+  </script>
+</body>
+</html>
