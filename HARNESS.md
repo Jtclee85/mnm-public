@@ -48,13 +48,15 @@
 
 - 상태: 완료
 - 마지막 담당: Claude Code
-- 기준 브랜치: `main`
-- 마지막 완료 작업: 공개용 Vercel `YOUTUBE_API_KEY` 설정 후 추천 영상 동작 확인
+- 기준 브랜치: `main` (작업 브랜치 `security-deps-update`는 main에 fast-forward 병합됨)
+- 마지막 완료 작업: npm 보안 경고 대응. 패치 버전 의존성 갱신(form-data, nanoid, mdast-util-to-hast, sharp)과 Next.js 14.1.0 → 14.2.35 업그레이드. 이 변경은 공개본에만 적용했고 원본 `mnm`은 14.1.0 그대로 둠.
 - 공개 URL: `https://mnm-public.vercel.app`
 - 보호 대상: 원본 `Jtclee85/mnm`, 원본 Vercel 프로젝트 `mnm`
-- 알려진 설정: 공개용 `OPENAI_API_KEY`와 `YOUTUBE_API_KEY`가 Vercel에 저장됨. `YOUTUBE_API_KEY`는 사용자가 원본 심사본과 **같은 키**를 복사해 넣었으므로 YouTube API 일일 할당량을 원본과 공유한다. 공개용 사용량이 늘면 원본 추천 영상이 `quotaLimited`로 비게 될 수 있다.
-- 검증 상태: 2026-09-29 공개 URL HTTP 200, `/api/recommended-videos?topic=독도` 응답 `source: live`, `quotaLimited: false`, 승인 채널(동북아역사재단) 영상 3개 반환 확인. 코드 변경 없음.
-- 미완료: 없음. 선택 사항으로 할당량 분리가 필요해지면 별도 Google Cloud 프로젝트의 새 키로 `mnm-public`의 `YOUTUBE_API_KEY`만 교체한다.
-- 다음 에이전트 시작점: 사용자 요청을 확인한다. 추천 영상이 비면 먼저 API 응답의 `quotaLimited`/`error` 필드로 원본과의 할당량 공유 문제인지 확인한다.
+- 알려진 설정: 공개용 `OPENAI_API_KEY`와 `YOUTUBE_API_KEY`가 Vercel Production에 저장됨. `YOUTUBE_API_KEY`는 원본 심사본과 **같은 키**라 YouTube 일일 할당량을 공유한다. Preview 배포는 Vercel 로그인 보호가 걸려 있고 API 키도 없어 외부 API 검증에 쓸 수 없다.
+- 검증 상태 (2026-09-29): 전체 E2E 123 통과 / 2 실패 / 11 skip, `npm run build`와 `npm run build:offline-demo` 성공. 프로덕션 배포 후 `/`, `/share` 200, `/api/chat` SSE 스트리밍, `/api/chat-once`, `/api/recommended-videos` 실제 응답 확인(각 1회 호출).
+- 알려진 실패 (의존성 변경과 무관, 기존부터 존재): `tests/offline-demo.spec.js`의 `[demo-reviewer-guide]`, `[demo-starts-on-input-screen]` 2개. 테스트가 원본에만 있는 gitignore 파일 `submission-demo/demo-snapshot.local.json`(주제 "강화 고인돌")을 가정하지만, 공개본에는 없어 `demo-snapshot.example.json`(성덕대왕신종)이 쓰인다. 실제 사용 데이터이므로 복사하지 않는다. 수정하려면 테스트가 스냅샷 주제를 파일에서 읽게 바꿔야 한다.
+- 알려진 빌드 경고: Edge 라우트에서 `openai/core.mjs`의 `process.version/platform/arch` 사용 경고. 실제 Edge 실행은 정상 확인됨.
+- 남은 보안 경고: `npm audit` 2건(next critical, postcss high). next 관련 권고는 34건에서 23건으로 감소. 남은 권고는 주로 App Router, Server Components/Actions, 미들웨어, rewrites, 자체 호스팅 이미지 최적화 대상이며 이 앱(Pages Router, 미들웨어·rewrites 없음, Vercel 호스팅)과 직접 관련이 적다. 완전 해결은 `next@16`(주 버전 2단계 상승, React 19 필요 가능성) 업그레이드가 필요하므로 사용자 확인 후 별도 브랜치에서 진행한다.
+- 다음 에이전트 시작점: 사용자 요청을 확인한다. Next 16 업그레이드 요청 시 공식 마이그레이션 가이드와 React 버전 요구사항부터 확인한다.
 
 작업을 마칠 때 위 항목을 덮어써서 최신 상태만 유지한다. 과거 이력이 필요하면 Git 로그를 사용한다.
