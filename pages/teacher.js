@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
-import TeacherClassPanel from '../components/TeacherClassPanel';
+import PrivacyFooter from '../components/PrivacyFooter';
+import { PRIVACY_POLICY_LINK_LABELS } from '../lib/i18n';
 import { REQUIRES_CLASS_CODE } from '../lib/aiProviderConfig';
 import { TEACHER_TEXT as T } from '../lib/teacherText';
 
 // 교사용 설정 화면 — 교사 Gemini 키로 오늘의 학급 코드를 만든다. share.js처럼 한국어 고정이다.
 // 오프라인 시연(file://)은 API를 쓰지 않으므로 안내만 보여 준다.
 const OFFLINE_DEMO_MODE = process.env.NEXT_PUBLIC_OFFLINE_DEMO_MODE === 'true';
+// 제출용 번들에는 사용하지 않는 키 입력·학급 관리 코드 자체를 포함하지 않는다.
+const TeacherClassPanel = process.env.NEXT_PUBLIC_OFFLINE_DEMO_MODE === 'true'
+  ? null
+  : require('../components/TeacherClassPanel').default;
 
 export default function TeacherPage() {
   const [isMobile, setIsMobile] = useState(false);
@@ -40,6 +45,7 @@ export default function TeacherPage() {
         {unavailableNotice
           ? <p role="alert" style={s.unavailable} data-testid="teacher-unavailable">{unavailableNotice}</p>
           : <TeacherClassPanel isMobile={isMobile} />}
+        {!OFFLINE_DEMO_MODE && <PrivacyFooter label={PRIVACY_POLICY_LINK_LABELS.ko} style={{ marginTop: 'auto' }} />}
       </main>
     </>
   );

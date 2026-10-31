@@ -99,3 +99,5 @@ OpenAI API 사용료는 ChatGPT 구독과 별개다.
 학생용: [학급 코드로 참여하기](https://mnm-public.vercel.app)
 
 2026-10-31 공개용 main 배포 및 전용 Upstash Redis Free 연결을 적용했습니다. 교사는 AI 공급자를 고르고 자기 키를 등록한 뒤 학급 코드를 만들어 학생에게 알려 줍니다.
+
+개인정보처리방침은 `/privacy`에서 확인할 수 있으며, 교사용·학생용 화면 하단에서 새 탭으로 열립니다. 원문은 `content/privacy-policy.md`에서 관리합니다. 온라인 운영 문안은 오프라인 제출 패키지에 포함하지 않습니다.

@@ -1,0 +1,19 @@
+.page { max-width: 1040px; margin: 0 auto; padding: 28px 20px 48px; color: var(--color-text); }
+.navigation { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.navigation a { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-primary-dark); }
+.article { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; padding: 32px; font-family: system-ui, sans-serif; line-height: 1.9; overflow-wrap: anywhere; }
+.article h1 { font-size: 28px; line-height: 1.5; margin: 0 0 28px; }
+.article h2 { font-size: 21px; line-height: 1.6; margin: 36px 0 14px; }
+.article p, .article li { font-size: 16px; }
+.article ul { padding-inline-start: 24px; }
+.tableScroll { max-width: 100%; overflow-x: auto; border-radius: 10px; border: 1px solid var(--color-border); }
+.article table { min-width: 620px; width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.8; }
+.article caption { text-align: start; padding: 10px 14px; font-weight: 700; }
+.article th, .article td { padding: 12px; text-align: start; vertical-align: top; border: 1px solid var(--color-border); }
+.article th { background: var(--color-surface-alt); }
+@media (max-width: 600px) {
+  .page { padding: 16px 12px 32px; }
+  .article { padding: 20px 16px; }
+  .article h1 { font-size: 23px; }
+  .article h2 { font-size: 19px; }
+}

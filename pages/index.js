@@ -4,6 +4,7 @@ import Image from 'next/image';
 
 import titleLogo from '../public/title-mnm.png';
 import SectionCard from '../components/SectionCard';
+import PrivacyFooter from '../components/PrivacyFooter';
 import ResultCanvas from '../components/ResultCanvas';
 import RecommendedSources from '../components/RecommendedSources';
 import RecommendedVideos from '../components/RecommendedVideos';
@@ -1678,6 +1679,8 @@ export default function Home({
             </div>
           )}
         </div>
+
+        {!demoMode && <PrivacyFooter label={t.privacyPolicyLink} />}
 
         {/* 우하단 플로팅 챗봇 — 일반 모드는 조사를 시작한 뒤부터, 데모는 첫 화면부터 snapshot 대화를 보여준다. */}
         {(demoMode || !showLanding) && (
