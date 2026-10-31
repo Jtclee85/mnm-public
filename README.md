@@ -91,3 +91,11 @@ OpenAI API 사용료는 ChatGPT 구독과 별개다.
 - OpenAI 모델은 기존 `gpt-5.4-mini`(사진 읽기 `gpt-4o-mini`)를 유지한다. SDK 자동 재시도는 꺼 두어 중복 사용량을 줄인다.
 - `OPENAI_API_BASE_URL`은 로컬 테스트용 가짜 서버 주소다. 운영에는 설정하지 않는다.
 - 테스트는 가짜 Gemini·OpenAI·Upstash만 호출한다. 실제 키 검증이나 배포는 수행하지 않았다.
+
+## 공개 사이트
+
+교사용 설정: [API 키 등록·학급 코드 만들기](https://mnm-public.vercel.app/teacher)
+
+학생용: [학급 코드로 참여하기](https://mnm-public.vercel.app)
+
+2026-10-31 공개용 main 배포 및 전용 Upstash Redis Free 연결을 적용했습니다. 교사는 AI 공급자를 고르고 자기 키를 등록한 뒤 학급 코드를 만들어 학생에게 알려 줍니다.

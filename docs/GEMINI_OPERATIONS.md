@@ -3,7 +3,7 @@
 공개용 뭐냐면(`mnm-public`)은 생성형 AI 공급자로 Gemini를 쓴다. **교사**가 자기 Gemini 또는 OpenAI API 키로 학급 코드를 만들고, **학생**은 학급 코드만 입력해 AI 기능을 쓴다. 학생 화면에는 키가 전달되지 않는다.
 원본 심사본(`Jtclee85/mnm`)과 원본 Vercel 프로젝트 `mnm`에는 적용하지 않는다.
 
-> **현재 상태 (2026-09-30)**: 로컬 구현과 테스트만 끝났다. Vercel 환경변수 변경, Upstash 연결, Production 배포는 하지 않았다.
+> **현재 상태 (2026-10-31)**: 사용자 승인으로 main에 반영하고 `mnm-public.vercel.app`에 배포했다. 전용 Upstash Redis Free(도쿄)와 Production 암호화 비밀값을 연결했다. 실제 교사 키를 이용한 품질 점검은 아직 안 했다.
 > 사용자 결정으로 당분간 **교사 개인 테스트 용도**로만 쓴다. Gemini 약관 문제(아래 [보류된 약관 검토](#보류된-약관-검토))는 나중에 해결한다.
 
 ## 1. 선택한 모델
@@ -237,3 +237,12 @@ OpenAI API 사용료는 ChatGPT 구독과 별개다.
 
 OpenAI의 `insufficient_quota`는 `billing_required`로 안내한다. 하루를 기다리라는 Gemini 무료 한도 안내와 구분하며, 교사는 계정 잔액·결제·사용 한도를 확인한다.
 OpenAI 키 연결 확인은 [공식 모델 조회 API](https://developers.openai.com/api/reference/resources/models/methods/retrieve)를 사용한다.
+
+## 공개용 배포 설정 (2026-10-31)
+
+- 사용자 승인으로 공개용 main에 반영하고 Production에 배포했다. 원본 프로젝트는 변경하지 않았다.
+- `mnm-public-classes`: Upstash Redis Free, 도쿄(hnd1), 공개용 프로젝트에만 연결.
+- `KV_REST_API_URL`·`KV_REST_API_TOKEN`: Vercel 연동이 Production/Preview에 저장하며 값은 문서에 기록하지 않는다.
+- `CLASS_KEY_SECRET`: Production Secret. 입력 과정의 임시값을 새 난수로 교체했고 최종 배포에는 교체된 값을 사용한다.
+- Preview에서 학급 기능을 사용할 때는 Preview 전용 `CLASS_KEY_SECRET`을 별도로 설정한다.
+- 기존 서버 OpenAI 키와 YouTube 설정은 유지했다. 교사가 선택한 AI를 사용하는 학급 모드는 교사 입력 키를 사용한다.

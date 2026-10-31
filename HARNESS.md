@@ -46,20 +46,20 @@
 
 ## 현재 작업 인수인계
 
-- 상태: 완료 — 사용자 승인으로 교사용 Gemini/OpenAI 선택 변경을 `gemini-provider` 브랜치에 커밋·푸시. main 병합·Production 배포·Vercel 설정 변경은 하지 않음.
+- 상태: 완료 — 사용자 승인으로 `gemini-provider`를 main에 fast-forward 병합·푸시하고 공개 사이트 Production 배포. 공개용 저장소·Vercel 프로젝트 `mnm-public`만 변경.
 - 마지막 담당: Codex
-- 기준 브랜치: `main` (Production은 여전히 OpenAI 버전 `b527fd9`)
+- 기준 브랜치: `main` (교사 공급자 선택 코드 `59afb56` + 배포 기록 커밋)
 - 마지막 완료 작업: `/teacher`에서 Gemini/OpenAI 선택 → 해당 공급자 키 연결 확인 → 학급 코드 생성. 키는 공급자별 브라우저 저장소로 분리하고, 암호화된 학급 레코드에 공급자를 함께 저장. 네 AI 라우트가 학급의 공급자·교사 키를 사용하며 학생 공급자 헤더는 무시. 기존 학급은 Gemini로 호환. 키 교체 시 공급자도 함께 변경 가능. OpenAI 클라이언트는 요청마다 생성하고 자동 재시도 없음. 잔액 부족은 `billing_required`로 구분(학생 12개 언어 안내 포함).
 - 보류된 약관 검토: 사용자 결정(2026-09-30)으로 교사 개인 테스트 단계에서는 Gemini 연령 요건·무료 등급 데이터 사용 문제를 나중에 해결한다. 학생 대상 공개 운영 전 반드시 재검토(`docs/GEMINI_OPERATIONS.md` 마지막 절).
 - 공개 URL: `https://mnm-public.vercel.app`
 - 보호 대상: 원본 `Jtclee85/mnm`, 원본 Vercel 프로젝트 `mnm`
-- 알려진 설정: 공개용 `OPENAI_API_KEY`와 `YOUTUBE_API_KEY`가 Vercel Production에 저장됨. `YOUTUBE_API_KEY`는 원본 심사본과 **같은 키**라 YouTube 일일 할당량을 공유한다. `AI_PROVIDER`·Upstash·`CLASS_KEY_SECRET`은 Vercel에 아직 없음 — 이 브랜치를 그대로 배포하면 코드 기본값 `gemini`가 되고 저장소가 없어 학급 기능이 `class_unavailable`로 동작하지 않는다. 기존 동작을 유지하려면 배포 전에 `AI_PROVIDER=openai`를 설정해야 한다. Preview 배포는 Vercel 로그인 보호가 걸려 있어 외부 검증에 쓸 수 없다.
+- 알려진 설정 (2026-10-31): `mnm-public-classes` Upstash Redis Free 생성(도쿄 hnd1). `mnm-public`에만 연결, `KV_REST_API_URL`·`KV_REST_API_TOKEN` 등은 Production/Preview에 연동 저장. `CLASS_KEY_SECRET`은 Production에 Secret 형식으로 저장. 임시 입력값이 도구 출력에 포함돼 새 난수로 교체했으며 최종 배포는 교체된 값 사용. Preview에는 암호화 비밀값을 따로 설정해야 학급 생성 가능. `AI_PROVIDER` 미설정으로 학급 모드 기본값 적용. 기존 공개용 `OPENAI_API_KEY`·`YOUTUBE_API_KEY`는 유지, YouTube 키는 원본과 할당량 공유. 원본 `mnm` 및 다른 앱 DB에는 변경 없음. 명령줄 Vercel 로그인은 만료되어 브라우저 로그인·사용자 이메일 재인증으로 설정했음.
 - 검증 상태 (2026-10-31): 전체 Playwright 191 통과 / 실패 0 / 11 skip. 서버 단위 39개 별도 통과. `npm run build`와 `npm run build:offline-demo` 성공(오프라인 뒤 일반 빌드 복원). 실제 외부 AI·Upstash 대신 mock 사용. 비밀값 검사와 `git diff --check` 통과.
 - 주의: `npm run build:offline-demo` 뒤에는 `.next/required-server-files.json`이 덮어써지므로, `next start`로 확인하려면 일반 빌드를 다시 한다. 테스트 첫 실행 때 개발 서버가 `/teacher`를 컴파일하느라 느릴 수 있어 `tests/class-code.spec.js`에 미리 부르는 `beforeAll`이 있다.
 - 오프라인 테스트 수정: `tests/offline-demo.spec.js`가 `loadDemoSnapshot()`으로 앱과 동일한 스냅샷을 읽어 주제·원문·영상·대화를 확인하도록 변경. 공개본에 없는 개인 고인돌 스냅샷을 가정하던 기존 실패 2개 해소. 실제 개인 데이터나 앱 동작은 바꾸지 않음.
 - 알려진 빌드 경고: Edge 라우트에서 `openai/core.mjs`의 `process.version/platform/arch` 사용 경고. 실제 Edge 실행은 정상 확인됨.
 - 남은 보안 경고: `npm audit` 2건(next critical, postcss high). next 관련 권고는 34건에서 23건으로 감소. 남은 권고는 주로 App Router, Server Components/Actions, 미들웨어, rewrites, 자체 호스팅 이미지 최적화 대상이며 이 앱(Pages Router, 미들웨어·rewrites 없음, Vercel 호스팅)과 직접 관련이 적다. 완전 해결은 `next@16`(주 버전 2단계 상승, React 19 필요 가능성) 업그레이드가 필요하므로 사용자 확인 후 별도 브랜치에서 진행한다.
-- 남은 확인: 학급 코드 창 번역(ko 외 11개 언어) 원어민 검수, 실제 교사 키로 `/teacher`에서 코드를 만들고 학생 기기에서 네 모드·쉬운한국어·챗봇·사진 읽기 소량 수동 점검.
-- 다음 에이전트 시작점: `gemini-provider` 브랜치의 커밋·원격 상태를 확인한다. 기존 사용자 파일인 미추적 `.agents/`는 수정·스테이징하지 않는다. 실제 교사 키 품질 점검과 Upstash 연결은 아직 안 함. 사용자 승인 없이 main 병합·Production 활성화·Vercel 환경변수 변경 금지.
+- 남은 확인: 교사 실제 키로 학급 생성·학생 참여·네 모드·쉬운한국어·챗봇·사진 읽기 소량 수동 품질 점검. 학급 코드 창 번역 원어민 검수. Production HTTP 200·교사 공급자 선택 화면·학급 API 저장소 연결은 배포 후 확인한다.
+- 다음 에이전트 시작점: 공개 `/teacher`에서 교사가 실제 Gemini/OpenAI 키를 등록하고 학급 코드를 생성해 수동 품질 점검한다. 테스트에서는 실제 AI를 호출하지 않는다. 기존 미추적 `.agents/`는 그대로 두며 원본 저장소·원본 Vercel은 수정 금지.
 
 작업을 마칠 때 위 항목을 덮어써서 최신 상태만 유지한다. 과거 이력이 필요하면 Git 로그를 사용한다.
