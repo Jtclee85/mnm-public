@@ -1,4 +1,4 @@
-import { getAiProvider, resolveApiKey } from '../../lib/server/ai/provider';
+import { resolveAiRequest } from '../../lib/server/ai/provider';
 import { AiError, aiErrorResponse, jsonResponse, logAiError } from '../../lib/server/ai/errors';
 import { assertValidChatMessages } from '../../lib/server/ai/safety';
 import { AI_ERROR_CODES } from '../../lib/aiProviderConfig';
@@ -18,8 +18,7 @@ export default async function handler(req) {
     });
     assertValidChatMessages(messages);
 
-    const provider = getAiProvider();
-    const apiKey = await resolveApiKey(req, provider);
+    const { provider, apiKey } = await resolveAiRequest(req);
     const iterator = provider.generateStream({ messages, apiKey });
 
     // 첫 조각을 받은 뒤에 SSE를 시작한다. 키 오류·할당량 초과·안전 차단처럼 시작 단계에서

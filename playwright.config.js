@@ -62,6 +62,7 @@ module.exports = defineConfig({
         'UPSTASH_REDIS_REST_TOKEN=mock-upstash-token',
         // 서버에서 나가는 Gemini 요청도 같은 가짜 서버로 보낸다(실제 Google 호출 없음).
         'GEMINI_API_BASE_URL=http://127.0.0.1:3998/gemini/v1beta',
+        'OPENAI_API_BASE_URL=http://127.0.0.1:3998/openai/v1',
         'CLASS_KEY_SECRET=e2e-only-class-secret-not-for-production-000000',
         // 모든 테스트가 같은 localhost IP를 쓰므로 틀린 코드 시도 제한은 크게 둔다(제한 자체는 단위 테스트).
         'CLASS_FAILURE_LIMIT=100000',

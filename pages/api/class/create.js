@@ -1,4 +1,4 @@
-import { getAiProvider, readTeacherApiKey } from '../../../lib/server/ai/provider';
+import { readTeacherProvider, readTeacherApiKey } from '../../../lib/server/ai/provider';
 import { aiErrorResponse, jsonResponse, logAiError } from '../../../lib/server/ai/errors';
 import { createClass } from '../../../lib/server/class/classes';
 import { assertClassMode, noStoreJson, readJsonBody } from '../../../lib/server/class/routes';
@@ -15,9 +15,10 @@ export default async function handler(req) {
   try {
     assertClassMode();
     const { schoolName } = await readJsonBody(req);
+    const provider = readTeacherProvider(req);
     const apiKey = readTeacherApiKey(req);
-    await getAiProvider().validateCredential({ apiKey });
-    const created = await createClass({ schoolName, apiKey });
+    await provider.validateCredential({ apiKey });
+    const created = await createClass({ schoolName, apiKey, provider: provider.name });
     return noStoreJson({ ok: true, ...created });
   } catch (error) {
     logAiError('class-create', error);

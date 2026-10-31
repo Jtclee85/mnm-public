@@ -1,4 +1,8 @@
 const { test, expect } = require('@playwright/test');
+const { loadDemoSnapshot } = require('../lib/demoSnapshot');
+
+// 개인 스냅샷이 없는 공개본에서도 실제 앱과 같은 스냅샷을 기준으로 검증한다.
+const snapshot = loadDemoSnapshot();
 
 test.describe('뭐냐면 — 오프라인 데모', () => {
   test('[demo-language-api-notice] 언어 선택을 조작하면 온라인 실행 안내 팝업을 보여준다', async ({ page }) => {
@@ -29,11 +33,11 @@ test.describe('뭐냐면 — 오프라인 데모', () => {
     await expect(coach).toContainText('심사위원 기능 안내 1 / 6');
     await expect(coach).toContainText('AI 분석의 맥락을 설정');
     await expect(coach.getByRole('button', { name: '다시 보지 않기' })).toHaveCount(0);
-    await expect(page.getByTestId('topic-input')).toHaveValue('강화 고인돌');
+    await expect(page.getByTestId('topic-input')).toHaveValue(snapshot.topic);
     await coach.getByRole('button', { name: '다음 기능' }).click();
 
     await expect(coach).toContainText('원문을 그대로 붙여넣는 영역');
-    await expect(page.getByTestId('source-textarea')).toHaveValue(/지석묘란 청동기시대/);
+    await expect(page.getByTestId('source-textarea')).toHaveValue(snapshot.session.sourceText);
     await coach.getByRole('button', { name: '다음 기능' }).click();
 
     await expect(coach).toContainText('API를 호출하지 않고 저장된 분석 결과');
@@ -47,7 +51,7 @@ test.describe('뭐냐면 — 오프라인 데모', () => {
     await expect(coach).toContainText('교사가 승인한 공공·교육 채널');
     await expect(coach).toContainText('영상·썸네일을 저장하지 않습니다');
     await expect(page.getByTestId('recommended-videos')).toBeVisible();
-    await expect(page.getByTestId('recommended-videos')).toContainText('강화 고인돌');
+    await expect(page.getByTestId('recommended-videos')).toContainText(snapshot.topic);
     await coach.getByRole('button', { name: '다음 기능' }).click();
 
     await expect(coach).toContainText('학생이 자기 말로 답하는 워크시트');
@@ -71,8 +75,9 @@ test.describe('뭐냐면 — 오프라인 데모', () => {
     await page.getByTestId('chatbot-toggle-button').click();
     await expect(coach).toContainText('저장된 대화 예시');
     const chatbotPopup = page.getByTestId('chatbot-popup');
-    await expect(chatbotPopup).toContainText('유명한 걸그룹이 고인돌에 가봤다는데');
-    await expect(chatbotPopup).toContainText('이번 조사 주제와 직접 관련이 적어 보여');
+    for (const message of snapshot.session.conversation) {
+      await expect(chatbotPopup).toContainText(message.content);
+    }
     await coach.getByRole('button', { name: '다음 기능' }).click();
 
     await expect(coach).toContainText('주제 이탈 질문을 안전하게 되돌리는 장치');
@@ -103,14 +108,14 @@ test.describe('뭐냐면 — 오프라인 데모', () => {
     await expect(page.getByTestId('app-tutorial-coach')).toContainText('심사위원 기능 안내');
     await page.keyboard.press('Escape');
 
-    await expect(page.getByTestId('topic-input')).toHaveValue('강화 고인돌');
+    await expect(page.getByTestId('topic-input')).toHaveValue(snapshot.topic);
     await expect(page.getByTestId('source-textarea')).not.toHaveValue('');
     await expect(page.getByText('자료 조사 나침반')).toBeVisible();
     await expect(page.getByTestId('result-canvas')).toHaveCount(0);
     await expect(page.getByTestId('chatbot-toggle-button')).toBeVisible();
 
     await page.getByTestId('chatbot-toggle-button').click({ force: true });
-    await expect(page.getByTestId('chatbot-popup')).toContainText('탁자식 고인돌과 바둑판식 고인돌은 어떻게 다를까요?');
+    await expect(page.getByTestId('chatbot-popup')).toContainText(snapshot.session.conversation[0].content);
     await page.getByLabel('닫기').click();
 
     await page.getByTestId('analyze-button').click();

@@ -1,4 +1,4 @@
-import { getAiProvider, readTeacherApiKey } from '../../lib/server/ai/provider';
+import { getAiProvider, readTeacherProvider, readTeacherApiKey } from '../../lib/server/ai/provider';
 import { aiErrorResponse, jsonResponse, logAiError } from '../../lib/server/ai/errors';
 
 // 교사용 설정 화면의 '연결 확인' 버튼 전용. 답변 생성 요청 없이 모델 정보 조회로 키를 확인한다.
@@ -13,9 +13,9 @@ export default async function handler(req) {
   }
 
   try {
-    const provider = getAiProvider();
+    const provider = getAiProvider().requiresClassCode ? readTeacherProvider(req) : getAiProvider();
     // OpenAI 모드는 서버 키를 쓰므로 교사 키를 받지 않는다.
-    const apiKey = provider.requiresClassCode ? readTeacherApiKey(req) : '';
+    const apiKey = getAiProvider().requiresClassCode ? readTeacherApiKey(req) : '';
     const { model } = await provider.validateCredential({ apiKey });
     return jsonResponse({ ok: true, provider: provider.name, model }, 200);
   } catch (error) {

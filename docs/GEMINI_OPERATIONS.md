@@ -1,6 +1,6 @@
 # Gemini 공급자와 학급 코드 운영 문서
 
-공개용 뭐냐면(`mnm-public`)은 생성형 AI 공급자로 Gemini를 쓴다. **교사**가 자기 Gemini API 키로 학급 코드를 만들고, **학생**은 학급 코드만 입력해 AI 기능을 쓴다. 학생 화면에는 키가 전달되지 않는다.
+공개용 뭐냐면(`mnm-public`)은 생성형 AI 공급자로 Gemini를 쓴다. **교사**가 자기 Gemini 또는 OpenAI API 키로 학급 코드를 만들고, **학생**은 학급 코드만 입력해 AI 기능을 쓴다. 학생 화면에는 키가 전달되지 않는다.
 원본 심사본(`Jtclee85/mnm`)과 원본 Vercel 프로젝트 `mnm`에는 적용하지 않는다.
 
 > **현재 상태 (2026-09-30)**: 로컬 구현과 테스트만 끝났다. Vercel 환경변수 변경, Upstash 연결, Production 배포는 하지 않았다.
@@ -218,3 +218,22 @@ Gemini 모드에서는 `OPENAI_API_KEY`가 없어도 모듈 로드와 빌드가 
    교사가 키를 가진 구조로 바꿔 '18세 이상이 API를 쓴다'는 요건은 교사 쪽에서 충족하지만, 앱을 초등학생이 이용한다는 두 번째 문장은 그대로 남는다.
 2. **무료 등급 데이터 사용** — 무료 서비스의 입력·출력은 Google 제품 개선에 쓰이고 사람이 검토할 수 있으며, 개인·민감 정보를 보내지 말라고 명시되어 있다. 학생이 입력하는 조사 자료·질문·사진이 해당할 수 있다.
 3. **지역 제한** — EEA·스위스·영국 사용자에게는 유료 서비스만 제공해야 한다.
+
+## 교사 AI 선택 (2026-10-31)
+
+`/teacher`의 **사용할 AI**에서 Gemini 또는 OpenAI를 선택한 뒤 해당 공급자의 키를 등록한다.
+연결 확인은 모델 조회로 수행하며, 모델 이용 가능 여부나 실제 생성 품질은 별도 점검이 필요하다.
+OpenAI 키 발급: [OpenAI API keys](https://platform.openai.com/api-keys).
+OpenAI API 사용료는 ChatGPT 구독과 별개다.
+
+- 키는 공급자별로 분리한다. Gemini는 기존 `mnmGeminiApiKey`, OpenAI는 `mnmOpenAiApiKey`를 사용한다.
+- 학급 레코드에 공급자를 함께 저장한다. 이전 레코드에 공급자가 없으면 Gemini로 처리한다.
+- 네 AI 라우트는 학급에 저장된 공급자와 교사 키를 사용한다. 학생이 공급자 헤더를 바꿔도 전환되지 않는다.
+- **지금 키로 교체**는 선택한 공급자와 키를 해당 학급에 함께 적용한다. 기존 코드는 유지된다.
+- `AI_PROVIDER=gemini`는 두 공급자를 고를 수 있는 학급 운영 모드다. `AI_PROVIDER=openai`는 기존 서버 공용 키 롤백 모드다.
+- OpenAI 모델은 기존 `gpt-5.4-mini`(사진 읽기 `gpt-4o-mini`)를 유지한다. SDK 자동 재시도는 꺼 두어 중복 사용량을 줄인다.
+- `OPENAI_API_BASE_URL`은 로컬 테스트용 가짜 서버 주소다. 운영에는 설정하지 않는다.
+- 테스트는 가짜 Gemini·OpenAI·Upstash만 호출한다. 실제 키 검증이나 배포는 수행하지 않았다.
+
+OpenAI의 `insufficient_quota`는 `billing_required`로 안내한다. 하루를 기다리라는 Gemini 무료 한도 안내와 구분하며, 교사는 계정 잔액·결제·사용 한도를 확인한다.
+OpenAI 키 연결 확인은 [공식 모델 조회 API](https://developers.openai.com/api/reference/resources/models/methods/retrieve)를 사용한다.

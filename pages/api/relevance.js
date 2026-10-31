@@ -1,6 +1,6 @@
 import { getLanguageOption } from "../../lib/i18n";
 import { isDirectTopicQuestion } from "../../lib/chatRelevance";
-import { getAiProvider, resolveApiKey } from "../../lib/server/ai/provider";
+import { resolveAiRequest } from "../../lib/server/ai/provider";
 import { aiErrorBody, logAiError, toAiError } from "../../lib/server/ai/errors";
 import { AI_ERROR_CODES } from "../../lib/aiProviderConfig";
 
@@ -19,6 +19,7 @@ const PASS_THROUGH_ERROR_CODES = new Set([
   AI_ERROR_CODES.MISSING_KEY,
   AI_ERROR_CODES.INVALID_KEY,
   AI_ERROR_CODES.QUOTA_EXCEEDED,
+  AI_ERROR_CODES.BILLING_REQUIRED,
   AI_ERROR_CODES.RATE_LIMITED,
   AI_ERROR_CODES.CLASS_CODE_REQUIRED,
   AI_ERROR_CODES.CLASS_CODE_INVALID,
@@ -71,10 +72,10 @@ export default async function handler(req) {
     return relevanceResponse({ relevant: true, reason: 'direct_topic_keyword', redirect: '' });
   }
 
-  const provider = getAiProvider();
+  let provider;
   let apiKey = '';
   try {
-    apiKey = await resolveApiKey(req, provider);
+    ({ provider, apiKey } = await resolveAiRequest(req));
   } catch (error) {
     const aiError = toAiError(error);
     return relevanceResponse({ relevant: false, reason: aiError.code, redirect: '', ...aiErrorBody(aiError) }, aiError.status);

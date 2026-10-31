@@ -2,12 +2,29 @@ import { useState } from 'react';
 import AiKeySettingsDialog from './AiKeySettingsDialog';
 import { useAiKey, maskAiKey } from '../lib/useAiKey';
 import { useTeacherClasses } from '../lib/useTeacherClasses';
-import { TEACHER_TEXT as T } from '../lib/teacherText';
+import { getTeacherKeyText, TEACHER_TEXT as T } from '../lib/teacherText';
 
-// 교사용 설정: ① 교사 Gemini 키(이 기기에만 저장) → ② 오늘의 학급 코드 만들기 → 이 기기에서
+// 교사용 설정: ① 교사 Gemini/OpenAI 키(이 기기에만 저장) → ② 오늘의 학급 코드 만들기 → 이 기기에서
 // 만든 학급 관리(복사·키 교체·재발급·삭제). 학생에게는 학급 코드만 알려 준다.
 export default function TeacherClassPanel({ isMobile }) {
-  const teacherKey = useAiKey();
+  const [provider, setProvider] = useState('gemini');
+  const [providerBusy, setProviderBusy] = useState(false);
+  return <>
+    <label style={{ ...s.label, display: 'block', marginBottom: 16 }}>
+      {T.providerLabel}
+      <select data-testid="teacher-provider" aria-label={T.providerLabel} value={provider} disabled={providerBusy}
+        onChange={e => setProvider(e.target.value)} style={{ ...s.input, marginLeft: 12 }}>
+        <option value="gemini">Gemini</option>
+        <option value="openai">OpenAI</option>
+      </select>
+    </label>
+    <TeacherProviderPanel key={provider} provider={provider} isMobile={isMobile} onBusyChange={setProviderBusy} />
+  </>;
+}
+
+// 공급자를 바꾸면 입력 중 키·성공 상태를 초기화하고 해당 공급자의 저장된 키만 불러온다.
+function TeacherProviderPanel({ provider, isMobile, onBusyChange }) {
+  const teacherKey = useAiKey(provider);
   const { classes, createClass, rotateKey, removeClass, reissueClass } = useTeacherClasses();
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [schoolName, setSchoolName] = useState('');
@@ -29,11 +46,13 @@ export default function TeacherClassPanel({ isMobile }) {
   const run = async (actionId, task) => {
     if (isBusy) return;
     setBusyAction(actionId);
+    onBusyChange(true);
     setNotice(null);
     try {
       await task();
     } finally {
       setBusyAction('');
+      onBusyChange(false);
     }
   };
 
@@ -41,7 +60,7 @@ export default function TeacherClassPanel({ isMobile }) {
     event.preventDefault();
     if (!requireKey()) return;
     run('create', async () => {
-      const result = await createClass({ schoolName, apiKey: teacherKey.apiKey });
+      const result = await createClass({ schoolName, apiKey: teacherKey.apiKey, provider });
       setNotice(result.ok ? { tone: 'ok', text: T.created } : { tone: 'error', text: errorText(result.code) });
     });
   };
@@ -57,7 +76,7 @@ export default function TeacherClassPanel({ isMobile }) {
   const handleRotate = (item) => {
     if (!requireKey()) return;
     run(`rotate:${item.code}`, async () => {
-      const result = await rotateKey({ item, apiKey: teacherKey.apiKey });
+      const result = await rotateKey({ item, apiKey: teacherKey.apiKey, provider });
       setNotice(result.ok ? { tone: 'ok', text: T.rotated } : { tone: 'error', text: errorText(result.code) });
     });
   };
@@ -65,7 +84,7 @@ export default function TeacherClassPanel({ isMobile }) {
   const handleReissue = (item) => {
     if (!requireKey()) return;
     run(`reissue:${item.code}`, async () => {
-      const result = await reissueClass({ item, apiKey: teacherKey.apiKey });
+      const result = await reissueClass({ item, apiKey: teacherKey.apiKey, provider });
       setNotice(result.ok ? { tone: 'ok', text: T.reissued } : { tone: 'error', text: errorText(result.code) });
     });
   };
@@ -81,7 +100,7 @@ export default function TeacherClassPanel({ isMobile }) {
   return (
     <div style={{ ...s.wrap, ...(isMobile ? s.wrapMobile : {}) }}>
       <section style={s.card} aria-labelledby="teacher-key-heading">
-        <h2 id="teacher-key-heading" style={s.sectionTitle}>{T.keySection}</h2>
+        <h2 id="teacher-key-heading" style={s.sectionTitle}>{provider === 'openai' ? T.openaiKeySection : T.keySection}</h2>
         {teacherKey.hasKey ? (
           <p style={s.keyLine} data-testid="teacher-key-status">
             {T.keySaved}: <code style={s.mono}>{maskAiKey(teacherKey.apiKey)}</code>
@@ -138,7 +157,7 @@ export default function TeacherClassPanel({ isMobile }) {
               <li key={item.code} style={s.listItem} data-testid="teacher-class-item">
                 <div style={s.codeBlock}>
                   <strong style={s.code} data-testid="teacher-class-code">{item.code}</strong>
-                  <span style={s.hint}>{T.expiresTonight}</span>
+                  <span style={s.hint}>{item.provider === 'openai' ? 'OpenAI' : 'Gemini'} · {T.expiresTonight}</span>
                 </div>
                 <div style={s.itemActions}>
                   <button type="button" data-testid="teacher-copy-code" style={s.secondaryBtn} onClick={() => handleCopy(item.code)}>
@@ -169,7 +188,8 @@ export default function TeacherClassPanel({ isMobile }) {
 
       <AiKeySettingsDialog
         isOpen={keyDialogOpen}
-        text={T.keyDialog}
+        provider={provider}
+        text={getTeacherKeyText(provider)}
         savedKeyMask={maskAiKey(teacherKey.apiKey)}
         savedRemember={teacherKey.remember}
         isMobile={isMobile}

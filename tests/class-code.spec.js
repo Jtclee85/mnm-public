@@ -43,8 +43,9 @@ async function fillSource(page) {
 }
 
 // 교사 화면에서 키를 등록하고 학급 코드를 만든다. 만든 코드를 돌려준다.
-async function teacherCreatesClass(page, { key = TEACHER_KEY, school = uniqueSchool() } = {}) {
+async function teacherCreatesClass(page, { key = TEACHER_KEY, school = uniqueSchool(), provider = 'gemini' } = {}) {
   await page.goto(`${BASE}/teacher`);
+  await page.getByTestId('teacher-provider').selectOption(provider);
   await page.getByTestId('teacher-open-key-dialog').click();
   await page.getByTestId('ai-key-input').fill(key);
   await page.getByTestId('ai-key-verify').click();
@@ -83,7 +84,7 @@ test.describe('교사용 설정', () => {
     await expect(page.getByTestId('teacher-key-status')).toContainText('아직 이 기기에 키가 없어요');
     await page.getByTestId('teacher-school-input').fill('해원초');
     await page.getByTestId('teacher-create-class').click();
-    await expect(page.getByTestId('teacher-notice')).toContainText('먼저 ① Gemini API 키를 설정해 주세요');
+    await expect(page.getByTestId('teacher-notice')).toContainText('먼저 ① 선택한 AI의 API 키를 설정해 주세요');
     await expect(page.getByTestId('ai-key-dialog')).toBeVisible();
     // 교사 화면의 키 설정 창은 학급 코드 보관 방식을 안내한다.
     await expect(page.getByTestId('ai-key-dialog')).toContainText('오늘 밤 12시까지 보관');
@@ -99,7 +100,7 @@ test.describe('교사용 설정', () => {
     await page.getByTestId('ai-key-input').fill('e2e-wrong-key-not-real-000000');
     await page.getByTestId('ai-key-verify').click();
     await expect(page.getByTestId('ai-key-status')).toHaveAttribute('data-status', 'error');
-    await expect(page.getByTestId('ai-key-status')).toContainText('Gemini API 키를 확인할 수 없어요');
+    await expect(page.getByTestId('ai-key-status')).toContainText('선택한 AI의 API 키를 확인할 수 없어요');
     const stored = await page.evaluate(() => ({ l: localStorage.getItem('mnmGeminiApiKey'), s: sessionStorage.getItem('mnmGeminiApiKey') }));
     expect(stored).toEqual({ l: null, s: null });
   });
@@ -538,5 +539,60 @@ test.describe('모바일', () => {
       expect(el.x + el.width).toBeLessThanOrEqual(390);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  });
+});
+
+test.describe('교사 AI 공급자 선택', () => {
+  test.use({ storageState: EMPTY_STORAGE });
+  test('공급자를 바꾸면 저장된 키가 섞이지 않고 공급자별로 삭제한다', async ({ page }) => {
+    await teacherCreatesClass(page);
+    await page.getByTestId('teacher-provider').selectOption('openai');
+    await expect(page.getByTestId('teacher-key-status')).toContainText('아직');
+    await page.getByTestId('teacher-open-key-dialog').click();
+    await expect(page.getByTestId('ai-key-issue-link')).toHaveAttribute('href', 'https://platform.openai.com/api-keys');
+    await page.getByTestId('ai-key-input').fill('e2e-valid-openai-not-real-2222');
+    await page.getByTestId('ai-key-verify').click();
+    await expect(page.getByTestId('ai-key-status')).toHaveAttribute('data-status', 'success');
+    await page.getByTestId('ai-key-later').click();
+    await page.getByTestId('teacher-provider').selectOption('gemini');
+    await expect(page.getByTestId('teacher-key-status')).toContainText('0001');
+    await page.getByTestId('teacher-provider').selectOption('openai');
+    await page.getByTestId('teacher-open-key-dialog').click();
+    await page.getByTestId('ai-key-delete').click();
+    expect(await page.evaluate(() => ({ gemini: !!sessionStorage.getItem('mnmGeminiApiKey'), openai: sessionStorage.getItem('mnmOpenAiApiKey') }))).toEqual({ gemini: true, openai: null });
+  });
+
+  test('OpenAI 학급 코드로 학생이 네 AI 경로를 쓰고 키는 받지 않는다', async ({ page, browser }) => {
+    const code = await teacherCreatesClass(page, { provider: 'openai' });
+    await expect(page.getByTestId('teacher-class-item').first()).toContainText('OpenAI');
+    const { context, page: student } = await newStudentPage(browser);
+    try {
+      await student.goto(BASE);
+      await student.getByTestId('class-code-input').fill(code);
+      await student.getByTestId('class-code-join').click();
+      await expect(student.getByTestId('class-code-status')).toHaveAttribute('data-status', 'success');
+      await student.getByTestId('class-code-later').click();
+      await fillSource(student);
+      await student.getByTestId('analyze-button').click();
+      await expect(student.getByText('가짜 OpenAI 쉬운설명입니다.').first()).toBeVisible();
+      const results = await student.evaluate(async (classCode) => {
+        const headers = { 'Content-Type': 'application/json', 'x-mnm-class': encodeURIComponent(classCode) };
+        const bodies = {
+          'chat-once': { messages: [{ role: 'user', content: '고인돌 설명' }] },
+          relevance: { topic: '고인돌', sourceText: '청동기 시대 무덤', userText: '오늘 뭐 먹지?' },
+          'extract-sign-text': { image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' },
+        };
+        return Promise.all(Object.entries(bodies).map(async ([path, body]) => {
+          const response = await fetch('/api/' + path, { method: 'POST', headers, body: JSON.stringify(body) });
+          return { status: response.status, data: await response.json() };
+        }));
+      }, code);
+      expect(results.map(r => r.status)).toEqual([200, 200, 200]);
+      expect(results[0].data.content).toContain('OpenAI');
+      expect(results[1].data.relevant).toBe(true);
+      expect(results[2].data.text).toContain('OpenAI');
+      expect(JSON.stringify(results)).not.toContain(TEACHER_KEY);
+      expect(await student.evaluate(() => localStorage.getItem('mnmOpenAiApiKey'))).toBeNull();
+    } finally { await context.close(); }
   });
 });

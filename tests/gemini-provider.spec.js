@@ -562,3 +562,41 @@ test.describe('중복 요청 방지', () => {
     expect(beginAiRequest(fp, { now: Date.now() + 3100 })).toBeTruthy();
   });
 });
+
+test.describe('학급 공급자 선택과 OpenAI 오류', () => {
+  test('학급에 저장한 공급자를 사용하고 학생 공급자 헤더는 무시한다', async () => {
+    const { resolveAiRequest } = require('../lib/server/ai/provider');
+    const { updateClassKey } = require('../lib/server/class/classes');
+    const created = await createClass({ schoolName: '공급자초', apiKey: FAKE_KEY, provider: 'openai' });
+    const request = appRequest('/api/chat', {}, { classCode: created.code });
+    request.headers.set('x-mnm-provider', 'gemini');
+    let resolved = await resolveAiRequest(request);
+    expect(resolved.provider.name).toBe('openai');
+    expect(resolved.apiKey).toBe(FAKE_KEY);
+    const updatedKey = 'unit-second-provider-key-not-real';
+    await updateClassKey({ code: created.code, manageToken: created.manageToken, apiKey: updatedKey, provider: 'gemini' });
+    resolved = await resolveAiRequest(request);
+    expect(resolved.provider.name).toBe('gemini');
+    expect(resolved.apiKey).toBe(updatedKey);
+    await expect(createClass({ schoolName: '공급자초', apiKey: FAKE_KEY, provider: 'unknown' }))
+      .rejects.toMatchObject({ code: 'invalid_request' });
+  });
+
+  test('OpenAI 키 확인은 입력받은 키로만 모델을 조회하고 잘못된 키를 구분한다', async () => {
+    const openai = require('../lib/server/ai/openai');
+    mockGemini(() => jsonReply({ id: 'mock-model', object: 'model' }));
+    await expect(openai.validateCredential({ apiKey: FAKE_KEY })).resolves.toMatchObject({ ok: true });
+    expect(calls[0].method).toBe('GET');
+    expect(new Headers(calls[0].headers).get('authorization') === `Bearer ${FAKE_KEY}`).toBe(true);
+    mockGemini(() => jsonReply({ error: { message: 'private details', type: 'invalid_request_error' } }, 401));
+    await expect(openai.validateCredential({ apiKey: FAKE_KEY })).rejects.toMatchObject({ code: 'invalid_key' });
+  });
+
+  test('OpenAI 잔액 부족은 하루 무료 할당량과 구분하고 자동 재시도하지 않는다', async () => {
+    const openai = require('../lib/server/ai/openai');
+    mockGemini(() => jsonReply({ error: { code: 'insufficient_quota', message: 'private details' } }, 429));
+    await expect(openai.generateOnce({ messages: [{ role: 'user', content: '설명해 줘' }], apiKey: FAKE_KEY }))
+      .rejects.toMatchObject({ code: 'billing_required', status: 429 });
+    expect(calls).toHaveLength(1);
+  });
+});

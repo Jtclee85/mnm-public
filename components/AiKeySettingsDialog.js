@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { AI_KEY_HEADER, GEMINI_KEY_ISSUE_URL } from '../lib/aiProviderConfig';
+import { AI_KEY_HEADER, AI_SELECTION_HEADER, GEMINI_KEY_ISSUE_URL, OPENAI_KEY_ISSUE_URL } from '../lib/aiProviderConfig';
 
 // Gemini API 키 설정 창. 사용법을 마친 뒤, 키 없이 AI 기능을 누른 뒤, 머리글의
 // 'AI 키 설정' 버튼으로 열린다. 입력한 키는 연결 확인에 성공한 뒤에만 저장한다.
 // 저장된 키는 부모가 끝 4자리만 남겨 넘겨주며, 전체 키를 화면에 다시 그리지 않는다.
 export default function AiKeySettingsDialog({
   isOpen,
+  provider = 'gemini',
   text,
   savedKeyMask,
   savedRemember,
@@ -66,7 +67,7 @@ export default function AiKeySettingsDialog({
     try {
       const res = await fetch('/api/verify-ai-key', {
         method: 'POST',
-        headers: { [AI_KEY_HEADER]: candidate },
+        headers: { [AI_KEY_HEADER]: candidate, [AI_SELECTION_HEADER]: provider },
       });
       data = await res.json().catch(() => ({}));
       ok = res.ok && data.ok === true;
@@ -125,7 +126,7 @@ export default function AiKeySettingsDialog({
             {text.notes.map(note => <li key={note} style={s.noteItem}>{note}</li>)}
           </ul>
           <a
-            href={GEMINI_KEY_ISSUE_URL}
+            href={provider === 'openai' ? OPENAI_KEY_ISSUE_URL : GEMINI_KEY_ISSUE_URL}
             target="_blank"
             rel="noopener noreferrer"
             data-testid="ai-key-issue-link"

@@ -1,4 +1,4 @@
-import { getAiProvider, readTeacherApiKey } from '../../../lib/server/ai/provider';
+import { readTeacherProvider, readTeacherApiKey } from '../../../lib/server/ai/provider';
 import { aiErrorResponse, jsonResponse, logAiError } from '../../../lib/server/ai/errors';
 import { updateClassKey } from '../../../lib/server/class/classes';
 import { assertClassMode, noStoreJson, readJsonBody, readManageToken } from '../../../lib/server/class/routes';
@@ -14,9 +14,10 @@ export default async function handler(req) {
   try {
     assertClassMode();
     const { code } = await readJsonBody(req);
+    const provider = readTeacherProvider(req);
     const apiKey = readTeacherApiKey(req);
-    await getAiProvider().validateCredential({ apiKey });
-    const updated = await updateClassKey({ code, manageToken: readManageToken(req), apiKey });
+    await provider.validateCredential({ apiKey });
+    const updated = await updateClassKey({ code, manageToken: readManageToken(req), apiKey, provider: provider.name });
     return noStoreJson({ ok: true, ...updated });
   } catch (error) {
     logAiError('class-update', error);

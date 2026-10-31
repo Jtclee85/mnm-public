@@ -1,4 +1,4 @@
-import { getAiProvider, resolveApiKey } from '../../lib/server/ai/provider';
+import { resolveAiRequest } from '../../lib/server/ai/provider';
 import { AiError, aiErrorResponse, jsonResponse, logAiError } from '../../lib/server/ai/errors';
 import { assertValidChatMessages } from '../../lib/server/ai/safety';
 import { AI_ERROR_CODES } from '../../lib/aiProviderConfig';
@@ -20,8 +20,7 @@ export default async function handler(req) {
     });
     assertValidChatMessages(messages);
 
-    const provider = getAiProvider();
-    const apiKey = await resolveApiKey(req, provider);
+    const { provider, apiKey } = await resolveAiRequest(req);
     const content = await provider.generateOnce({ messages, apiKey });
 
     return new Response(JSON.stringify({ content }), {

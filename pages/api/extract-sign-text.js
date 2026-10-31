@@ -1,4 +1,4 @@
-import { getAiProvider, resolveApiKey } from '../../lib/server/ai/provider';
+import { resolveAiRequest } from '../../lib/server/ai/provider';
 import { aiErrorBody, logAiError, toAiError } from '../../lib/server/ai/errors';
 import { ALLOWED_IMAGE_DATA_URL, MAX_IMAGE_BASE64_LENGTH } from '../../lib/server/ai/safety';
 import { AI_ERROR_CODES } from '../../lib/aiProviderConfig';
@@ -26,6 +26,7 @@ const PASS_THROUGH_ERROR_CODES = new Set([
   AI_ERROR_CODES.MISSING_KEY,
   AI_ERROR_CODES.INVALID_KEY,
   AI_ERROR_CODES.QUOTA_EXCEEDED,
+  AI_ERROR_CODES.BILLING_REQUIRED,
   AI_ERROR_CODES.RATE_LIMITED,
   AI_ERROR_CODES.CLASS_CODE_REQUIRED,
   AI_ERROR_CODES.CLASS_CODE_INVALID,
@@ -77,8 +78,7 @@ export default async function handler(req) {
 
   // 이미지(개인정보 포함 가능성이 있는 원본 데이터)와 키는 어떤 경우에도 로그에 남기지 않는다.
   try {
-    const provider = getAiProvider();
-    const apiKey = await resolveApiKey(req, provider);
+    const { provider, apiKey } = await resolveAiRequest(req);
     const parsed = await provider.analyzeImage({
       apiKey,
       image,

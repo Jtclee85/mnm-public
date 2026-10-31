@@ -52,11 +52,32 @@ function handleGemini(req, res, raw) {
   return send(res, 200, candidate(FAKE_GEMINI_TEXT));
 }
 
+// OpenAI 호환 가짜 응답. 교사 키 확인부터 학생 스트리밍까지 실제 외부 호출 없이 검증한다.
+function handleOpenAI(req, res, raw) {
+  const key = (req.headers.authorization || '').replace(/^Bearer /, '');
+  if (!key.startsWith('e2e-valid')) return send(res, 401, { error: { message: 'invalid', type: 'invalid_request_error' } });
+  if (req.method === 'GET') return send(res, 200, { id: 'mock-model', object: 'model' });
+  if (req.url.endsWith('/moderations')) return send(res, 200, { results: [{ flagged: false }] });
+  if (key.startsWith('e2e-valid-quota')) return send(res, 429, { error: { code: 'insufficient_quota', message: 'quota' } });
+  const body = JSON.parse(raw || '{}');
+  const schema = body.response_format?.json_schema?.schema;
+  const content = schema ? JSON.stringify(schema.properties?.relevant
+    ? { relevant: true, reason: 'mock', redirect: '' }
+    : { text: '가짜 OpenAI 안내판 원문', warnings: [] }) : '<easy>가짜 OpenAI 쉬운설명입니다.</easy>';
+  if (body.stream) {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.end(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`);
+    return;
+  }
+  return send(res, 200, { choices: [{ message: { content } }] });
+}
+
 const server = http.createServer((req, res) => {
   let raw = '';
   req.on('data', chunk => { raw += chunk; });
   req.on('end', () => {
     if (req.method === 'GET' && req.url === '/') return send(res, 200, { ok: true });
+    if (req.url.startsWith('/openai/')) return handleOpenAI(req, res, raw);
     if (req.url.startsWith('/gemini/')) return handleGemini(req, res, raw);
     if (req.method === 'GET' && req.url === '/__gemini-log') return send(res, 200, geminiLog);
     if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(res, 401, { error: 'WRONGPASS invalid password' });
