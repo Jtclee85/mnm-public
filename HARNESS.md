@@ -46,15 +46,16 @@
 
 ## 현재 작업 인수인계
 
-- 상태: 완료 — 교사용·학생용 하단 개인정보처리방침 링크 및 `/privacy` 추가. 공개용 main에 커밋·푸시해 배포. 원본 저장소·원본 Vercel 변경 없음.
+- 상태: 완료 — Gemini 모델을 `gemini-3.6-flash`로 교체. 전체 테스트와 빌드 통과, 공개용 main 커밋·푸시로 배포 예정(원격 상태는 확인 필요).
 - 마지막 담당: Codex
 - 기준 브랜치: `main`
-- 마지막 완료 작업: `content/privacy-policy.md`의 사용자 제공 문안을 `/privacy`에 정적으로 표시. 사용자 확인으로 상단 작성 메모만 제외하고 본문·대괄호 미확정 항목·공고일/시행일(2026-11-01)은 유지. 학생·교사 화면 하단 링크는 새 탭으로 열며 입력 상태 보존. 모든 기존 언어에 링크 문구 추가하고 한국어 본문임을 표시. 오프라인에서는 방침·링크·온라인 교사용 키 설정 코드를 제외해 제출물에 운영자 정보와 온라인 키 발급 코드가 포함되지 않게 함.
+- 마지막 완료 작업: Gemini 공통 모델 상수를 3.6으로 변경해 스트리밍·비스트리밍·관련성·이미지·키 확인에 함께 적용. 공식 안정 버전·무료 등급·3.5 교체 안내를 README, CLAUDE, 운영 문서에 반영하고 모델 고정 회귀 테스트 추가. 기존 개인정보처리방침·교사/학생 키 흐름 유지.
 - 보류된 약관 검토: 사용자 결정(2026-09-30)으로 교사 개인 테스트 단계에서는 Gemini 연령 요건·무료 등급 데이터 사용 문제를 나중에 해결한다. 학생 대상 공개 운영 전 반드시 재검토(`docs/GEMINI_OPERATIONS.md` 마지막 절).
 - 공개 URL: `https://mnm-public.vercel.app`
 - 보호 대상: 원본 `Jtclee85/mnm`, 원본 Vercel 프로젝트 `mnm`
 - 알려진 설정 (2026-10-31): `mnm-public-classes` Upstash Redis Free 생성(도쿄 hnd1). `mnm-public`에만 연결, `KV_REST_API_URL`·`KV_REST_API_TOKEN` 등은 Production/Preview에 연동 저장. `CLASS_KEY_SECRET`은 Production에 Secret 형식으로 저장. 임시 입력값이 도구 출력에 포함돼 새 난수로 교체했으며 최종 배포는 교체된 값 사용. Preview에는 암호화 비밀값을 따로 설정해야 학급 생성 가능. `AI_PROVIDER` 미설정으로 학급 모드 기본값 적용. 기존 공개용 `OPENAI_API_KEY`·`YOUTUBE_API_KEY`는 유지, YouTube 키는 원본과 할당량 공유. 원본 `mnm` 및 다른 앱 DB에는 변경 없음. 명령줄 Vercel 로그인은 만료되어 브라우저 로그인·사용자 이메일 재인증으로 설정했음.
-- 검증 상태 (2026-10-31): 전체 Playwright 198 통과 / 실패 0 / 11 skip. 신규 방침 테스트 7개(학생·교사 새 탭과 상태 보존, 본문 12조항·표, 다국어 링크, 390/1920px, 데모 제외). `npm run build`, `npm run build:submission`(오프라인 빌드 포함) 성공. 제출물에 방침 운영자 이름·이메일 없음 별도 검사. 원문은 작성 메모 제외 후 동일함을 확인. 실제 외부 AI는 mock 사용. 비밀값 검사와 `git diff --check` 통과.
+- 이전 개인정보처리방침 검증 (2026-10-31): 전체 Playwright 198 통과 / 실패 0 / 11 skip. 신규 방침 테스트 7개(학생·교사 새 탭과 상태 보존, 본문 12조항·표, 다국어 링크, 390/1920px, 데모 제외). `npm run build`, `npm run build:submission`(오프라인 빌드 포함) 성공. 제출물에 방침 운영자 이름·이메일 없음 별도 검사. 원문은 작성 메모 제외 후 동일함을 확인. 실제 외부 AI는 mock 사용. 비밀값 검사와 `git diff --check` 통과.
+- 이번 검증 (2026-11-01): 전체 Playwright 199 통과 / 실패 0 / 11 skip. `npm run build` 성공. 실제 외부 AI는 mock, 실제 교사 키 품질 점검 미실시. 비밀값 검사와 `git diff --check` 통과. 오프라인/제출 실행 경로 변경 없음.
 - 주의: `npm run build:offline-demo` 뒤에는 `.next/required-server-files.json`이 덮어써지므로, `next start`로 확인하려면 일반 빌드를 다시 한다. 테스트 첫 실행 때 개발 서버가 `/teacher`를 컴파일하느라 느릴 수 있어 `tests/class-code.spec.js`에 미리 부르는 `beforeAll`이 있다.
 - 오프라인 점검: 이전 개인 스냅샷 의존 테스트 수정은 유지. 제출 검사에서 발견된 기존 교사용 키 설정 코드·발급 URL의 오프라인 번들 포함 문제를 온라인 전용 조건부 로딩으로 해결. 공개용 방침 본문은 제출 소스 복사 대상 밖에 두고 오프라인 `/privacy`는 404 처리.
 - 알려진 빌드 경고: Edge 라우트에서 `openai/core.mjs`의 `process.version/platform/arch` 사용 경고. 실제 Edge 실행은 정상 확인됨.

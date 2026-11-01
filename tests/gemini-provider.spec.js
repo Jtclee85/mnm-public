@@ -154,6 +154,10 @@ test.describe('Gemini 메시지 변환', () => {
 });
 
 test.describe('Gemini 요청과 응답', () => {
+  test('운영 모델은 안정 버전 Gemini 3.6 Flash다', () => {
+    expect(GEMINI_MODEL).toBe('gemini-3.6-flash');
+  });
+
   test('스트리밍: SSE 조각을 텍스트로 이어 주고 thinking 파트는 뺀다. 키는 헤더로만 보낸다', async () => {
     mockGemini(() => sseReply([
       { candidates: [{ content: { parts: [{ text: '생각 중', thought: true }] } }] },

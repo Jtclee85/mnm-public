@@ -32,7 +32,7 @@
 - Next.js 14.1 **pages router** (app router 아님), React 18, **JavaScript** (TypeScript 아님)
 - **AI 공급자는 `AI_PROVIDER`(gemini | openai)로 고른다. 공개용 기본값은 `gemini`다.** 값은 [next.config.js](next.config.js)의 `env`로 빌드 시점에 화면과 서버에 함께 주입된다([lib/aiProviderConfig.js](lib/aiProviderConfig.js)). 바꾸면 재빌드가 필요하다.
 - 모든 AI 라우트는 [lib/server/ai/provider.js](lib/server/ai/provider.js)의 공통 인터페이스(`generateStream`, `generateOnce`, `generateStructured`, `analyzeImage`, `validateCredential`)만 부른다. 라우트에서 공급자 SDK를 직접 부르지 않는다.
-- Gemini: REST API를 `fetch`로 직접 호출한다(SDK 미사용). 모델은 [lib/server/ai/gemini.js](lib/server/ai/gemini.js)의 `GEMINI_MODEL` **한 곳에서만** 관리한다 (현재 `gemini-3.5-flash`). 안전 필터는 `lib/server/ai/safety.js`에서 명시적으로 켠다.
+- Gemini: REST API를 `fetch`로 직접 호출한다(SDK 미사용). 모델은 [lib/server/ai/gemini.js](lib/server/ai/gemini.js)의 `GEMINI_MODEL` **한 곳에서만** 관리한다 (현재 `gemini-3.6-flash`). 안전 필터는 `lib/server/ai/safety.js`에서 명시적으로 켠다.
 - **교사 키 + 학급 코드 구조**: 교사가 `/teacher`에서 Gemini/OpenAI를 고르고 해당 키로 학급 코드(`학교이름-숫자4자리`, 한국 시간 자정 만료)를 만든다. 서버는 키를 AES-GCM(`CLASS_KEY_SECRET`)으로 암호화해 Upstash Redis(REST, `fetch`)에 저장하고, 학급에 공급자를 함께 저장하고 학생 AI 요청의 학급 코드 헤더(`CLASS_CODE_HEADER`)로 찾아 요청 처리 중에만 복호화한다. **학생 브라우저에는 키를 절대 보내지 않는다.** 운영 기준은 [docs/GEMINI_OPERATIONS.md](docs/GEMINI_OPERATIONS.md).
 - OpenAI(롤백용): OpenAI SDK(`openai` v4), 서버 키 `OPENAI_API_KEY`. 채팅 모델은 [lib/server/chatApiShared.js](lib/server/chatApiShared.js)의 `MODEL` 상수에서 관리한다 (현재 `gpt-5.4-mini`). moderation(`omni-moderation-latest`)은 [lib/server/ai/openai.js](lib/server/ai/openai.js)에 있다.
 - **모든 `pages/api/*` 라우트는 Edge runtime이다.** Node 전용 API(`fs`, `path`, `Buffer` 등) 사용 금지.

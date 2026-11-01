@@ -10,18 +10,16 @@
 
 | 항목 | 값 |
 |---|---|
-| 모델 코드 | `gemini-3.5-flash` |
+| 모델 코드 | `gemini-3.6-flash` |
 | 설정 위치 | [lib/server/ai/gemini.js](../lib/server/ai/gemini.js)의 `GEMINI_MODEL` (이 상수만 바꾸면 전체가 바뀐다) |
 | 호출 방식 | Gemini REST API `v1beta` (`generateContent`, `streamGenerateContent?alt=sse`, `models.get`) |
 
-### 선택 근거 (2026-09-29 Google 공식 문서 확인)
+### 선택 근거 (2026-11-01 Google 공식 문서 확인)
 
-- [모델 목록](https://ai.google.dev/gemini-api/docs/models): `gemini-3.5-flash`는 **Stable**(안정) 모델이다. Preview·Experimental이 아니다.
-- [가격표](https://ai.google.dev/gemini-api/docs/pricing): `gemini-3.5-flash`의 **무료 등급(Free Tier)** 입력·출력이 "Free of charge"로 제공된다.
-- [모델 상세](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash): 텍스트·이미지 입력, 구조화 출력(Structured outputs), 입력 1,048,576 토큰, 출력 65,536 토큰을 지원한다. 표지판 사진 읽기와 관련성 판정을 한 모델로 처리할 수 있다.
-- 작업지시의 기본 후보(품질 우선의 `gemini-3.5-flash`)가 위 조건(안정 버전, 무료 등급 제공)을 모두 만족해 그대로 채택했다.
-
-참고: 같은 문서에서 `gemini-3.5-flash`는 "legacy Flash model"로 소개되고, 더 새로운 안정 모델(`gemini-3.6-flash`, `gemini-3.7-flash`, `gemini-3.8-flash`)도 무료 등급으로 제공된다. 실제 학생 자료로 품질·속도·무료 한도를 비교한 뒤 `GEMINI_MODEL`만 바꿔 교체할 수 있다.
+- [모델 상세](https://ai.google.dev/gemini-api/docs/models/gemini-3.6-flash): `gemini-3.6-flash`는 **Stable**(안정) 모델이며 운영용으로 제공된다. 텍스트·이미지 입력과 구조화 출력을 지원해 기존 네 AI 경로를 같은 모델로 처리한다.
+- [가격표](https://ai.google.dev/gemini-api/docs/pricing): Standard 무료 등급의 입력·출력이 무료다. 실제 분당·하루 한도는 교사 키가 속한 Google AI Studio 프로젝트에서 확인한다. 여러 학급이 같은 프로젝트 키를 사용하면 한도를 공유한다.
+- [이전 모델 안내](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash): 처음 채택했던 `gemini-3.5-flash`는 지원 중단 대상으로 바뀌었고 요청도 3.6으로 자동 연결된다. 공식 교체 안내에 맞춰 모델 문자열을 명시적으로 3.6으로 바꿨다.
+- 실제 교사 키의 사용 가능 여부·응답 품질은 별도 확인이 필요하다. 이번 자동 검증은 외부 AI 요청을 모두 mock 처리한다.
 
 ### SDK 대신 REST를 쓰는 이유
 
