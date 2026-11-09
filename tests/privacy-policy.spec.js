@@ -40,7 +40,7 @@ test('본문 12개 조항과 표를 표시하고 작성 메모만 제외한다',
   await expect(article.getByRole('table').getByRole('row')).toHaveCount(10);
   await expect(article).not.toContainText('작성 기준:');
   await expect(article).toContainText('[확정된 개인정보 처리의 법적 근거]');
-  await expect(article).toContainText('운영 로그는 기록일로부터 1년간 보관 후 삭제합니다.');
+  await expect(article).toContainText('운영자가 적용하는 로그 보관 기준은 기록일로부터 1년입니다.');
   await expect(article).toContainText('최초 실패로부터 10분 후 자동 만료됩니다.');
   const providerPolicy = article.getByRole('link', { name: '악용 감시 정책', exact: true });
   await expect(providerPolicy).toHaveAttribute('href', 'https://ai.google.dev/gemini-api/docs/usage-policies');
