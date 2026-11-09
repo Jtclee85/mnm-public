@@ -25,7 +25,12 @@ export default function PrivacyPage({ blocks }) {
                 <tbody>{block.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody>
               </table>
             </div>
-          ) : <ReactMarkdown key={index}>{block.text}</ReactMarkdown>)}
+          ) : <ReactMarkdown
+            key={index}
+            components={{
+              a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+            }}
+          >{block.text}</ReactMarkdown>)}
         </article>
       </main>
     </>
