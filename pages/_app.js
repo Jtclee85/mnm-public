@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import '../styles/globals.css';
 import { playClick } from '../lib/sounds';
@@ -15,7 +15,8 @@ function isAnalyticsPage(url) {
 }
 
 function allowPageView(event) {
-  if (event.type !== 'pageview' || !isAnalyticsPage(new URL(event.url))) return null;
+  if (event.type !== 'pageview' || !isAnalyticsPage(new URL(event.url))
+    || !isAnalyticsPage(new URL(window.location.href))) return null;
   if (document.referrer) {
     const referrer = new URL(document.referrer);
     // 공유 주소와 식별값이 들어갈 수 있는 유입 URL은 통계에서 제외한다.
@@ -29,8 +30,12 @@ function allowPageView(event) {
 
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
-  const showAnalytics = Analytics && process.env.NODE_ENV === 'production' && router.isReady
-    && typeof window !== 'undefined' && isAnalyticsPage(new URL(window.location.href));
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  useEffect(() => {
+    if (Analytics && process.env.NODE_ENV === 'production' && router.isReady) {
+      setShowAnalytics(isAnalyticsPage(new URL(window.location.href)));
+    }
+  }, [router.isReady, router.asPath]);
   useEffect(() => {
     const handleClick = (e) => {
       const btn = e.target.closest('button');
